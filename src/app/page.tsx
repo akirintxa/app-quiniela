@@ -120,7 +120,10 @@ export default async function Home({
              <div className="relative z-10">
               <h3 className="text-xl font-black mb-1 uppercase tracking-tighter">¡Bienvenido! 🚀</h3>
               <p className="text-blue-100 mb-4 font-bold uppercase text-[9px] tracking-widest opacity-80">Elige tu apodo para competir</p>
-              <form action={updateNickname} className="flex flex-col sm:flex-row gap-3">
+              <form action={async (formData) => {
+                'use server';
+                await updateNickname(formData);
+              }} className="flex flex-col sm:flex-row gap-3">
                 <input name="nickname" type="text" placeholder="TU APODO" className="flex-1 max-w-xs rounded-xl px-5 py-3 bg-white/10 border border-white/20 text-white outline-none font-black uppercase text-sm" required />
                 <button className="bg-white text-blue-700 px-8 py-3 rounded-xl font-black hover:bg-blue-50 transition-all active:scale-95 uppercase text-[10px] tracking-widest">Listo</button>
               </form>
