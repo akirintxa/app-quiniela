@@ -21,34 +21,61 @@ export default async function RankingPage({
   const selectedPoolId = resolvedSearchParams.pool;
 
   // 1. Fetch user's pools for the tabs
-  let myPools: any[] = [];
-  if (user) {
-    const { data } = await supabase
-      .from('pool_members')
-      .select('pool_id, pools (name)')
-      .eq('user_id', user.id);
-    if (data) myPools = data;
-  }
+  const { data: myPools } = await supabase
+    .from('pool_members')
+    .select('pool_id, pools (name)')
+    .eq('user_id', user.id);
 
   // 2. Fetch Ranking Data
   let query = supabase.from('predictions').select('user_id, points_won, profiles:user_id (nickname)');
   
   if (selectedPoolId) {
-    // Filter by pool members
-    const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', selectedPoolId);
-    if (members) {
+    // SECURITY & CASTING: Convert to number and check membership
+    const poolIdNum = Number(selectedPoolId);
+    const { data: members } = await supabase
+      .from('pool_members')
+      .select('user_id')
+      .eq('pool_id', poolIdNum);
+    
+    if (members && members.length > 0) {
       query = query.in('user_id', members.map(m => m.user_id));
     }
   }
 
-  const { data: rankingData } = await query;
+  const { data: rankingData, error } = await query;
 
+  if (error) {
+    console.error("Ranking fetch error:", error);
+  }
+
+  // 3. Process Data
   const userMap: Record<string, { nickname: string, points: number, isMe: boolean }> = {};
+  
+  // If we are in a pool, make sure to show all members even with 0 points
+  if (selectedPoolId) {
+    const poolIdNum = Number(selectedPoolId);
+    const { data: membersWithProfiles } = await supabase
+      .from('pool_members')
+      .select('user_id, profiles:user_id (nickname)')
+      .eq('pool_id', poolIdNum);
+    
+    membersWithProfiles?.forEach(m => {
+      userMap[m.user_id] = { 
+        nickname: (m.profiles as any)?.nickname || 'Usuario', 
+        points: 0, 
+        isMe: m.user_id === user.id 
+      };
+    });
+  }
+
   rankingData?.forEach((pred: any) => {
     const id = pred.user_id;
     const points = pred.points_won || 0;
     const nickname = pred.profiles?.nickname || `Usuario #${id.substring(0, 5)}`;
-    if (!userMap[id]) userMap[id] = { nickname, points: 0, isMe: id === user?.id };
+    
+    if (!userMap[id]) {
+      userMap[id] = { nickname, points: 0, isMe: id === user.id };
+    }
     userMap[id].points += points;
   });
 
@@ -67,28 +94,26 @@ export default async function RankingPage({
           </h1>
         </header>
 
-        {/* TABS FOR DIFFERENT RANKINGS */}
-        {user && (
-          <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit">
+        {/* TABS */}
+        <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit">
+          <Link 
+            href="/ranking" 
+            className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${!selectedPoolId ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            Global
+          </Link>
+          {myPools?.map(p => (
             <Link 
-              href="/ranking" 
-              className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${!selectedPoolId ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}
+              key={p.pool_id}
+              href={`/ranking?pool=${p.pool_id}`} 
+              className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
-              Global
+              {p.pools.name}
             </Link>
-            {myPools.map(p => (
-              <Link 
-                key={p.pool_id}
-                href={`/ranking?pool=${p.pool_id}`} 
-                className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedPoolId === p.pool_id ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}
-              >
-                {p.pools.name}
-              </Link>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
 
-        {/* Scoring Rules (Mini) */}
+        {/* Scoring Mini-rules */}
         <div className="mb-8 grid grid-cols-3 gap-2">
           <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 text-center">
             <span className="text-xs font-black text-blue-600 block">+1</span>
