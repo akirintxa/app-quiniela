@@ -50,7 +50,7 @@ export default function LoginPage({
                 <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400" htmlFor="password">
                   Contraseña
                 </label>
-                <Link href="#" className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-500">¿La olvidaste?</Link>
+                <Link href="/forgot-password" className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-500">¿La olvidaste?</Link>
               </div>
               <div className="relative">
                 <input className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all pr-12" type={showPassword ? "text" : "password"} name="password" placeholder="••••••••" required />

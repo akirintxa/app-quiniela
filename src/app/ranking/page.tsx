@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
+import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 
 export const metadata: Metadata = {
   title: "Ranking Global | FIFA 2026",
@@ -20,7 +21,8 @@ export default async function RankingPage({
   const resolvedSearchParams = await searchParams;
   const selectedPoolId = resolvedSearchParams.pool;
 
-  // 1. Fetch user's pools for the tabs
+  // ... (rest of data fetching logic)
+
   const { data: myPools } = await supabase
     .from('pool_members')
     .select('pool_id, pools (name)')
@@ -42,10 +44,10 @@ export default async function RankingPage({
     if (allProfiles) targetUserIds = allProfiles.map(p => p.id);
   }
 
-  // 3. Fetch Profiles and Predictions for these users
+  // 3. Fetch Profiles (with Avatars and Teams) and Predictions for these users
   const { data: profilesData } = await supabase
     .from('profiles')
-    .select('id, nickname')
+    .select('id, nickname, avatar_url, teams:favorite_team_id (iso_code)')
     .in('id', targetUserIds);
 
   const { data: predictionsData } = await supabase
@@ -54,12 +56,14 @@ export default async function RankingPage({
     .in('user_id', targetUserIds);
 
   // 4. Process Ranking
-  const userMap: Record<string, { nickname: string, points: number, isMe: boolean }> = {};
+  const userMap: Record<string, { nickname: string, avatar: string, flag: string | null, points: number, isMe: boolean }> = {};
   
-  // Initialize with all target users (ensures they show with 0 points)
+  // Initialize with all target users
   profilesData?.forEach(p => {
     userMap[p.id] = { 
       nickname: p.nickname || 'Usuario', 
+      avatar: p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.id}`,
+      flag: (p.teams as any)?.iso_code || null,
       points: 0, 
       isMe: p.id === user.id 
     };
@@ -74,8 +78,18 @@ export default async function RankingPage({
 
   const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
 
+  const getFlagUrl = (iso: string) => {
+    if (!iso) return null;
+    const cleanIso = iso.toLowerCase();
+    if (cleanIso === 'gb-sct') return `https://flagcdn.com/w40/gb-sct.png`;
+    if (cleanIso === 'gb-eng') return `https://flagcdn.com/w40/gb-eng.png`;
+    if (cleanIso === 'gb-wls') return `https://flagcdn.com/w40/gb-wls.png`;
+    return `https://flagcdn.com/w40/${cleanIso}.png`;
+  };
+
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
+      <RealtimeRankingListener />
       <div className="max-w-4xl mx-auto">
         <header className="mb-10 text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
@@ -126,7 +140,7 @@ export default async function RankingPage({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-zinc-800/50">
-                <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-gray-400">Pos</th>
+                <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-gray-400 w-16 text-center">Pos</th>
                 <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-gray-400">Jugador</th>
                 <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-gray-400 text-right">Pts</th>
               </tr>
@@ -143,7 +157,27 @@ export default async function RankingPage({
                         {index + 1}
                       </span>
                     </td>
-                    <td className="py-5 font-black text-sm uppercase tracking-tighter">{member.nickname}</td>
+                    <td className="py-5 pr-6">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl overflow-hidden border-2 flex-shrink-0 ${member.isMe ? 'border-white/30' : 'border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800'}`}>
+                          <img src={member.avatar} alt={member.nickname} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-sm uppercase tracking-tighter">{member.nickname}</span>
+                            {member.flag && (
+                              <img 
+                                src={getFlagUrl(member.flag) || ""} 
+                                alt="fav team" 
+                                className="w-4 h-3 object-cover rounded-[2px] opacity-80 shadow-sm"
+                                title="Equipo Favorito"
+                              />
+                            )}
+                          </div>
+                          {member.isMe && <span className="text-[8px] font-black uppercase tracking-widest opacity-60">Tú</span>}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-6 py-5 text-right font-black text-xl tracking-tighter">{member.points}</td>
                   </tr>
                 ))

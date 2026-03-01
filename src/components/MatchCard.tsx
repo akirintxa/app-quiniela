@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -36,22 +35,18 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const startTime = new Date(match.start_time);
   
   const isMatchStarted = new Date() > startTime;
-  const isLocked = match.is_locked || isMatchStarted || match.is_finished;
-  const isLive = (match.result_a !== null || match.result_b !== null) && !match.is_finished;
   const isFinished = match.is_finished;
+  const isLive = match.is_locked && !isFinished;
+  const isLocked = match.is_locked || isMatchStarted || isFinished;
   const isKnockout = match.stage !== "group";
   const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
 
   const getFlagUrl = (iso: string) => {
     if (!iso) return null;
     const cleanIso = iso.toLowerCase();
-    
-    // Special cases for UK nations in flagcdn
-    if (cleanIso === 'gb-sct') return `https://flagcdn.com/w80/gb-sct.png`; // Scotland
-    if (cleanIso === 'gb-eng') return `https://flagcdn.com/w80/gb-eng.png`; // England
-    if (cleanIso === 'gb-wls') return `https://flagcdn.com/w80/gb-wls.png`; // Wales
-    
-    // Only return for standard 2-letter codes
+    if (cleanIso === 'gb-sct') return `https://flagcdn.com/w80/gb-sct.png`;
+    if (cleanIso === 'gb-eng') return `https://flagcdn.com/w80/gb-eng.png`;
+    if (cleanIso === 'gb-wls') return `https://flagcdn.com/w80/gb-wls.png`;
     if (iso.length !== 2) return null; 
     return `https://flagcdn.com/w80/${cleanIso}.png`;
   };
@@ -63,7 +58,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
       alert("En eliminatorias, debes elegir quién pasa de ronda.");
       return;
     }
-
     setLoading(true);
     try {
       await savePrediction(match.id, Number(scoreA), Number(scoreB), winnerId);
@@ -99,7 +93,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             alt={team.name} 
             className="w-full h-full object-cover"
             onError={(e) => {
-              // Fallback if image fails to load
               (e.target as HTMLImageElement).style.display = 'none';
               (e.target as HTMLImageElement).parentElement!.classList.add('bg-zinc-200', 'dark:bg-zinc-700');
             }}
@@ -120,16 +113,20 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
       isLive ? 'border-red-500 ring-4 ring-red-500/10' :
       saved ? 'border-green-500 ring-4 ring-green-500/10' : 'border-gray-100 dark:border-zinc-800'
     }`}>
+      {/* Header Badges */}
       {isFinished ? (
-        <div className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center">Finalizado</div>
+        <div className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2.5 text-center shadow-inner">Partido Finalizado</div>
       ) : isLive ? (
-        <div className="bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2 text-center animate-pulse">• EN VIVO</div>
+        <div className="bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2.5 text-center animate-pulse shadow-inner flex items-center justify-center gap-2">
+          <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
+          En Vivo • Resultado Parcial
+        </div>
       ) : null}
 
       <div className="p-8">
         <div className="flex flex-col items-center">
-          <div className="flex justify-between w-full mb-8">
-            <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-lg">
+          <div className="flex justify-between w-full mb-8 px-1">
+            <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isLive ? 'bg-red-50 text-red-600 dark:bg-red-950/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
               {match.stage.replace("_", " ")} {match.group_id ? `• Grupo ${match.group_id}` : ""}
             </span>
             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
@@ -137,13 +134,16 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             </span>
           </div>
 
-          {(match.result_a !== null || match.result_b !== null) && (
-            <div className="mb-6 flex flex-col items-center">
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{isLive ? 'Marcador Live' : 'Resultado Real'}</span>
-              <div className={`flex items-center gap-4 px-6 py-2 rounded-2xl border ${isLive ? 'bg-red-50 border-red-100 dark:bg-red-950/20' : 'bg-gray-50 border-gray-100 dark:bg-zinc-800'}`}>
-                <span className={`text-3xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>{match.result_a}</span>
-                <span className="text-gray-300 font-black">-</span>
-                <span className={`text-3xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>{match.result_b}</span>
+          {/* MAIN SCORE UNIT (Only for Live or Finished) */}
+          {(isLive || isFinished) && (
+            <div className={`mb-6 flex flex-col items-center p-4 rounded-3xl w-full transition-all border-2 ${isLive ? 'bg-red-50/50 border-red-100 dark:bg-red-950/10 dark:border-red-900/20 shadow-lg' : 'bg-gray-50 border-gray-100 dark:bg-zinc-800/50 dark:border-zinc-700'}`}>
+              <span className={`text-[9px] font-black uppercase tracking-[0.3em] mb-2 ${isLive ? 'text-red-500' : 'text-gray-400'}`}>
+                {isLive ? 'Marcador Actual' : 'Resultado Final'}
+              </span>
+              <div className="flex items-center gap-6">
+                <span className={`text-4xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{match.result_a ?? 0}</span>
+                <span className={`text-xl font-black ${isLive ? 'text-red-300' : 'text-gray-300'}`}>-</span>
+                <span className={`text-4xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{match.result_b ?? 0}</span>
               </div>
             </div>
           )}
@@ -160,14 +160,14 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             </button>
 
             <div className="flex flex-col items-center gap-1">
-              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Tu Pronóstico</span>
+              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">{isFinished ? 'Tu Pronóstico' : 'Tu Predicción'}</span>
               <div className="flex items-center gap-2">
-                <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+                <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
                 <span className="text-gray-300 font-black">:</span>
-                <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+                <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
               </div>
               {initialPrediction?.points_won !== null && initialPrediction?.points_won !== undefined && isFinished && (
-                <div className="mt-3 px-4 py-1 bg-green-100 text-green-700 rounded-full text-[9px] font-black uppercase tracking-widest">+{initialPrediction?.points_won} Puntos</div>
+                <div className="mt-3 px-4 py-1 bg-green-100 text-green-700 rounded-full text-[9px] font-black uppercase tracking-widest animate-in zoom-in duration-300">+{initialPrediction?.points_won} Puntos</div>
               )}
             </div>
 
@@ -184,16 +184,16 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
           
           <div className="w-full flex gap-3">
             {!userId ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl">Login para jugar</div>
+              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-dashed">Login para jugar</div>
             ) : isFinished ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">Cerrado</div>
+              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/30">Cerrado</div>
             ) : isLocked ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 animate-pulse">En Juego</div>
+              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 animate-pulse">En Juego</div>
             ) : (
-              <button onClick={handleSave} disabled={loading || scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)} className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${saved ? 'bg-green-500 text-white shadow-green-500/20' : (scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'}`}>{loading ? "..." : saved ? "¡Listo!" : "Confirmar"}</button>
+              <button onClick={handleSave} disabled={loading || scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)} className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${saved ? 'bg-green-500 text-white shadow-green-500/20' : (scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'}`}>{loading ? "..." : saved ? "¡Listo!" : "Confirmar"}</button>
             )}
             {poolId && (
-              <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
+              <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             )}
@@ -203,24 +203,27 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
 
       {showSpy && (
         <div className="border-t border-gray-50 dark:border-zinc-800 p-8 bg-gray-50/30 dark:bg-zinc-950/20">
-          <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 mb-6 flex items-center gap-3">Ranking de Pronósticos</h4>
+          <div className="flex justify-between items-center mb-6">
+            <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 flex items-center gap-3">Ranking de Pronósticos</h4>
+            {isLive && <span className="text-[8px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-md animate-pulse">Puntos Live</span>}
+          </div>
           {loadingSpy ? (
-            <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest">Cargando...</div>
+            <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest italic">Cargando...</div>
           ) : groupPredictions.length > 0 ? (
             <div className="grid grid-cols-1 gap-3">
               {groupPredictions.map((pred, i) => {
                 let displayPoints = pred.points_won;
                 if (isLive) displayPoints = calculatePoints(pred as Prediction, match);
                 return (
-                  <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm">
+                  <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter">{pred.profiles?.nickname}</span>
                       {displayPoints !== null && displayPoints !== undefined && <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>}
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg">{pred.predicted_a}</span>
+                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_a}</span>
                       <span className="font-black text-gray-200">:</span>
-                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg">{pred.predicted_b}</span>
+                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_b}</span>
                     </div>
                   </div>
                 );

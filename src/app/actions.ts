@@ -125,9 +125,12 @@ export async function leavePool(poolId: number) {
   revalidatePath(`/groups/${poolId}`);
 }
 
-// USER: Update Nickname
-export async function updateNickname(formData: FormData) {
+// USER: Update Profile
+export async function updateProfile(formData: FormData) {
   const nickname = formData.get('nickname') as string;
+  const avatarUrl = formData.get('avatar_url') as string;
+  const favoriteTeamId = formData.get('favorite_team_id') as string;
+
   if (!nickname) return { error: 'El apodo es obligatorio' };
   
   const supabase = await createClient();
@@ -137,7 +140,10 @@ export async function updateNickname(formData: FormData) {
 
   // 1. Update Auth Metadata
   const { error: authError } = await supabase.auth.updateUser({ 
-    data: { nickname: nickname } 
+    data: { 
+      nickname: nickname,
+      avatar_url: avatarUrl
+    } 
   });
   
   if (authError) return { error: 'Error al actualizar metadatos' };
@@ -145,7 +151,12 @@ export async function updateNickname(formData: FormData) {
   // 2. Update Public Profiles Table
   const { error: profileError } = await supabase
     .from('profiles')
-    .upsert({ id: user.id, nickname: nickname });
+    .upsert({ 
+      id: user.id, 
+      nickname: nickname,
+      avatar_url: avatarUrl,
+      favorite_team_id: favoriteTeamId ? Number(favoriteTeamId) : null
+    });
 
   if (profileError) return { error: 'Error al actualizar perfil público' };
 
@@ -157,24 +168,54 @@ export async function updateNickname(formData: FormData) {
 }
 
 // ADMIN Actions
+async function updatePredictionsPoints(supabase: any, matchId: number, matchData: any) {
+  const { data: predictions } = await supabase.from('predictions').select('*').eq('match_id', matchId);
+  if (predictions && predictions.length > 0) {
+    const updates = predictions.map((pred: any) => ({
+      id: pred.id, 
+      user_id: pred.user_id, 
+      match_id: pred.match_id,
+      points_won: calculatePoints(pred, matchData as Match)
+    }));
+    await supabase.from('predictions').upsert(updates);
+  }
+}
+
 export async function updateLiveScore(matchId: number, resultA: number, resultB: number) {
   const supabase = await checkAdmin();
-  await supabase.from('matches').update({ result_a: resultA, result_b: resultB, is_locked: true }).eq('id', matchId);
-  revalidatePath('/'); revalidatePath('/admin');
+  const { data: match } = await supabase
+    .from('matches')
+    .update({ result_a: resultA, result_b: resultB, is_locked: true })
+    .eq('id', matchId)
+    .select()
+    .single();
+
+  if (match) {
+    await updatePredictionsPoints(supabase, matchId, match);
+  }
+
+  revalidatePath('/'); 
+  revalidatePath('/admin');
+  revalidatePath('/ranking');
 }
 
 export async function finalizeMatch(matchId: number, resultA: number, resultB: number) {
   const supabase = await checkAdmin();
-  const { data: match } = await supabase.from('matches').update({ result_a: resultA, result_b: resultB, is_locked: true, is_finished: true }).eq('id', matchId).select().single();
-  const { data: predictions } = await supabase.from('predictions').select('*').eq('match_id', matchId);
-  if (predictions && predictions.length > 0) {
-    const updates = predictions.map((pred: Prediction) => ({
-      id: pred.id, user_id: pred.user_id, match_id: pred.match_id,
-      points_won: calculatePoints(pred, match as Match)
-    }));
-    await supabase.from('predictions').upsert(updates);
+  const { data: match } = await supabase
+    .from('matches')
+    .update({ result_a: resultA, result_b: resultB, is_locked: true, is_finished: true })
+    .eq('id', matchId)
+    .select()
+    .single();
+
+  if (match) {
+    await updatePredictionsPoints(supabase, matchId, match);
   }
-  revalidatePath('/'); revalidatePath('/ranking'); revalidatePath('/admin'); revalidatePath('/groups');
+
+  revalidatePath('/'); 
+  revalidatePath('/ranking'); 
+  revalidatePath('/admin'); 
+  revalidatePath('/groups');
 }
 
 export async function resetMatch(matchId: number) {

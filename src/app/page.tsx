@@ -1,10 +1,11 @@
 import { createClient } from "@/utils/supabase/server";
 import MatchCard from "@/components/MatchCard";
-import { Match, Prediction } from "@/types";
+import GroupStandings from "@/components/GroupStandings";
+import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { updateNickname } from "./actions";
 import RandomizeButton from "@/components/RandomizeButton";
+import { calculateStandings } from "@/lib/standings";
 
 export default async function Home({
   searchParams,
@@ -19,7 +20,7 @@ export default async function Home({
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: allMatches } = await supabase.from("matches").select("id, group_id, stage").eq('is_finished', false);
+  const { data: allMatchesSummary } = await supabase.from("matches").select("id, group_id, stage").eq('is_finished', false);
 
   let predictions: Prediction[] = [];
   let userStats = { points: 0, rank: 0 };
@@ -42,9 +43,9 @@ export default async function Home({
   }
 
   const groupCompletion: Record<string, boolean> = {};
-  if (allMatches && user) {
+  if (allMatchesSummary && user) {
     const groupMap: Record<string, { total: number, predicted: number }> = {};
-    allMatches.forEach(m => {
+    allMatchesSummary.forEach(m => {
       if (m.stage === 'group') {
         const gid = m.group_id || 'unknown';
         if (!groupMap[gid]) groupMap[gid] = { total: 0, predicted: 0 };
@@ -57,11 +58,25 @@ export default async function Home({
     });
   }
 
+  // Fetch matches for rendering
   let query = supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`);
   if (view === "today") query = query.order("start_time", { ascending: true }).limit(12);
   else if (view === "groups") query = query.eq("group_id", selectedGroup).eq("stage", "group").order("start_time", { ascending: true });
   else if (view === "knockout") query = query.eq("stage", selectedStage).order("start_time", { ascending: true });
   const { data: matches } = await query;
+
+  // CALCULATE STANDINGS IF VIEWING GROUP
+  let groupTeams: Team[] = [];
+  let standings: any[] = [];
+  if (view === "groups" && matches) {
+    const teamMap = new Map();
+    matches.forEach(m => {
+      if (m.team_a) teamMap.set(m.team_a.id, m.team_a);
+      if (m.team_b) teamMap.set(m.team_b.id, m.team_b);
+    });
+    groupTeams = Array.from(teamMap.values());
+    standings = calculateStandings(matches as Match[], groupTeams);
+  }
 
   const groupedMatches: Record<string, Match[]> = {};
   if (view === "today" && matches) {
@@ -94,11 +109,8 @@ export default async function Home({
                 <span className="bg-blue-600 text-white px-2 py-0.5 text-[9px] font-black rounded uppercase tracking-widest">TORNEO</span>
                 <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Copa del Mundo</h2>
               </div>
-              <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
-                FIFA <span className="text-blue-600">COPA DEL MUNDO</span>
-              </h1>
+              <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">FIFA COPA DEL MUNDO</h1>
             </div>
-
           </div>
           {user && (
             <div className="bg-white dark:bg-zinc-900 px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center gap-6">
@@ -115,28 +127,11 @@ export default async function Home({
           )}
         </header>
 
-        {user && !user.user_metadata?.nickname && (
-          <div className="mb-10 p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl shadow-lg text-white relative overflow-hidden">
-             <div className="relative z-10">
-              <h3 className="text-xl font-black mb-1 uppercase tracking-tighter">¡Bienvenido! 🚀</h3>
-              <p className="text-blue-100 mb-4 font-bold uppercase text-[9px] tracking-widest opacity-80">Elige tu apodo para competir</p>
-              {/* Form wrapper to fix TS void return type error */}
-              <form action={async (formData) => {
-                'use server';
-                await updateNickname(formData);
-              }} className="flex flex-col sm:flex-row gap-3">
-                <input name="nickname" type="text" placeholder="TU APODO" className="flex-1 max-w-xs rounded-xl px-5 py-3 bg-white/10 border border-white/20 text-white outline-none font-black uppercase text-sm" required />
-                <button className="bg-white text-blue-700 px-8 py-3 rounded-xl font-black hover:bg-blue-50 transition-all active:scale-95 uppercase text-[10px] tracking-widest">Listo</button>
-              </form>
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col gap-6 mb-10">
           <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit self-center sm:self-start overflow-x-auto shadow-sm">
-            <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Próximos</Link>
-            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Fase de Grupos</Link>
-            <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Eliminatorias</Link>
+            <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
+            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Fase de Grupos</Link>
+            <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Eliminatorias</Link>
           </div>
 
           {view === 'groups' && (
@@ -154,23 +149,16 @@ export default async function Home({
               {user && <RandomizeButton groupId={selectedGroup} />}
             </div>
           )}
-
-          {view === 'knockout' && (
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2">
-              {stages.map(s => (
-                s.status === "active" ? (
-                  <Link key={s.id} href={`/?view=knockout&stage=${s.id}`} className={`px-4 py-2 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedStage === s.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>{s.name}</Link>
-                ) : (
-                  <div key={s.id} className="px-4 py-2 bg-gray-50 dark:bg-zinc-900/50 text-gray-300 dark:text-zinc-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-dashed border-gray-200 dark:border-zinc-800 cursor-not-allowed">
-                    {s.name} <span className="text-[8px] ml-1 opacity-50 uppercase tracking-tighter">Soon</span>
-                  </div>
-                )
-              ))}
-            </div>
-          )}
         </div>
 
         <section className="space-y-10">
+          {view === "groups" && standings.length > 0 && (
+            <div className="animate-in fade-in zoom-in duration-500">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mb-4 px-2 italic">Clasificación Grupo {selectedGroup}</h2>
+              <GroupStandings stats={standings} />
+            </div>
+          )}
+
           {view === "today" ? (
             Object.entries(groupedMatches).map(([date, dayMatches]) => (
               <div key={date} className="space-y-6">
