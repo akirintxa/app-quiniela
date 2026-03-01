@@ -26,57 +26,50 @@ export default async function RankingPage({
     .select('pool_id, pools (name)')
     .eq('user_id', user.id);
 
-  // 2. Fetch Ranking Data
-  let query = supabase.from('predictions').select('user_id, points_won, profiles:user_id (nickname)');
+  // 2. Fetch ALL relevant players first
+  let targetUserIds: string[] = [];
   
   if (selectedPoolId) {
-    // SECURITY & CASTING: Convert to number and check membership
-    const poolIdNum = Number(selectedPoolId);
+    // Mode: Pool Ranking - Only members of this pool
     const { data: members } = await supabase
       .from('pool_members')
       .select('user_id')
-      .eq('pool_id', poolIdNum);
-    
-    if (members && members.length > 0) {
-      query = query.in('user_id', members.map(m => m.user_id));
-    }
+      .eq('pool_id', Number(selectedPoolId));
+    if (members) targetUserIds = members.map(m => m.user_id);
+  } else {
+    // Mode: Global Ranking - All users with a profile
+    const { data: allProfiles } = await supabase.from('profiles').select('id');
+    if (allProfiles) targetUserIds = allProfiles.map(p => p.id);
   }
 
-  const { data: rankingData, error } = await query;
+  // 3. Fetch Profiles and Predictions for these users
+  const { data: profilesData } = await supabase
+    .from('profiles')
+    .select('id, nickname')
+    .in('id', targetUserIds);
 
-  if (error) {
-    console.error("Ranking fetch error:", error);
-  }
+  const { data: predictionsData } = await supabase
+    .from('predictions')
+    .select('user_id, points_won')
+    .in('user_id', targetUserIds);
 
-  // 3. Process Data
+  // 4. Process Ranking
   const userMap: Record<string, { nickname: string, points: number, isMe: boolean }> = {};
   
-  // If we are in a pool, make sure to show all members even with 0 points
-  if (selectedPoolId) {
-    const poolIdNum = Number(selectedPoolId);
-    const { data: membersWithProfiles } = await supabase
-      .from('pool_members')
-      .select('user_id, profiles:user_id (nickname)')
-      .eq('pool_id', poolIdNum);
-    
-    membersWithProfiles?.forEach(m => {
-      userMap[m.user_id] = { 
-        nickname: (m.profiles as any)?.nickname || 'Usuario', 
-        points: 0, 
-        isMe: m.user_id === user.id 
-      };
-    });
-  }
+  // Initialize with all target users (ensures they show with 0 points)
+  profilesData?.forEach(p => {
+    userMap[p.id] = { 
+      nickname: p.nickname || 'Usuario', 
+      points: 0, 
+      isMe: p.id === user.id 
+    };
+  });
 
-  rankingData?.forEach((pred: any) => {
-    const id = pred.user_id;
-    const points = pred.points_won || 0;
-    const nickname = pred.profiles?.nickname || `Usuario #${id.substring(0, 5)}`;
-    
-    if (!userMap[id]) {
-      userMap[id] = { nickname, points: 0, isMe: id === user.id };
+  // Add points
+  predictionsData?.forEach(pred => {
+    if (userMap[pred.user_id]) {
+      userMap[pred.user_id].points += pred.points_won || 0;
     }
-    userMap[id].points += points;
   });
 
   const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
@@ -130,7 +123,7 @@ export default async function RankingPage({
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-zinc-800/50">
                 <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-gray-400">Pos</th>
@@ -142,8 +135,8 @@ export default async function RankingPage({
               {sortedRanking.length > 0 ? (
                 sortedRanking.map((member, index) => (
                   <tr key={index} className={`${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
-                    <td className="px-6 py-5 w-16">
-                      <span className={`w-8 h-8 flex items-center justify-center rounded-xl text-[10px] font-black ${
+                    <td className="px-6 py-5 w-16 text-center">
+                      <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${
                         index === 0 && !member.isMe ? 'bg-yellow-400 text-yellow-950 shadow-lg shadow-yellow-400/20' : 
                         member.isMe ? 'bg-white/20 text-white' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'
                       }`}>
@@ -156,7 +149,7 @@ export default async function RankingPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="px-8 py-20 text-center text-gray-400 text-xs font-black uppercase tracking-widest opacity-50">Esperando el pitido inicial...</td>
+                  <td colSpan={3} className="px-8 py-20 text-center text-gray-400 text-xs font-black uppercase tracking-widest opacity-50">No hay jugadores registrados todavía</td>
                 </tr>
               )}
             </tbody>
