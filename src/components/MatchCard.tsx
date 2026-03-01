@@ -140,8 +140,8 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
                 <span className="text-gray-300 font-black">:</span>
                 <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
               </div>
-              {initialPrediction?.points_won !== null && isFinished && (
-                <div className="mt-3 px-4 py-1 bg-green-100 text-green-700 rounded-full text-[9px] font-black uppercase tracking-widest">+{initialPrediction.points_won} Puntos</div>
+              {initialPrediction?.points_won !== null && initialPrediction?.points_won !== undefined && isFinished && (
+                <div className="mt-3 px-4 py-1 bg-green-100 text-green-700 rounded-full text-[9px] font-black uppercase tracking-widest">+{initialPrediction?.points_won} Puntos</div>
               )}
             </div>
 
