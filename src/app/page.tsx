@@ -100,20 +100,20 @@ export default async function Home({
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-5xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="flex items-start gap-6">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform -rotate-3">
-              <span className="text-2xl font-black text-white tracking-tighter">Q26</span>
+          <div className="flex items-start gap-4 sm:gap-6">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform -rotate-3">
+              <span className="text-xl sm:text-2xl font-black text-white tracking-tighter">Q26</span>
             </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <span className="bg-blue-600 text-white px-2 py-0.5 text-[9px] font-black rounded uppercase tracking-widest">TORNEO</span>
                 <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Copa del Mundo</h2>
               </div>
-              <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">FIFA COPA DEL MUNDO</h1>
+              <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">FIFA COPA DEL MUNDO</h1>
             </div>
           </div>
           {user && (
-            <div className="bg-white dark:bg-zinc-900 px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center gap-6">
+            <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
               <div className="text-center">
                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Tu Puntuación</span>
                 <span className="text-2xl font-black text-blue-600 leading-none">{userStats.points}</span>

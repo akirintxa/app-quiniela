@@ -96,16 +96,16 @@ export default async function RankingPage({
             <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">Competición</span>
             <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em]">Tablas de Posiciones</h2>
           </div>
-          <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
             HALL OF <span className="text-blue-600 dark:text-blue-500">FAME</span>
           </h1>
         </header>
 
         {/* TABS */}
-        <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit">
+        <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar">
           <Link 
             href="/ranking" 
-            className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${!selectedPoolId ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            className={`flex-1 sm:flex-none text-center px-4 sm:px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${!selectedPoolId ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
           >
             Global
           </Link>
@@ -113,7 +113,7 @@ export default async function RankingPage({
             <Link 
               key={p.pool_id}
               href={`/ranking?pool=${p.pool_id}`} 
-              className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`flex-1 sm:flex-none text-center px-4 sm:px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               {(p.pools as any)?.name}
             </Link>

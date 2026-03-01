@@ -5,27 +5,28 @@ import { createClient } from "@/utils/supabase/client";
 import { updateProfile } from "../actions";
 
 const AVATARS = [
-  // 20 Opciones de estilo Pixel/Minecraft (Identicon)
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Alpha",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Bravo",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Charlie",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Delta",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Echo",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Foxtrot",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Golf",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Hotel",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=India",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Juliet",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Kilo",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Lima",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Mike",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=November",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Oscar",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Papa",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Quebec",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Romeo",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Sierra",
-  "https://api.dicebear.com/7.x/identicon/svg?seed=Tango"
+  // Los 10 primeros originales (Avataaars)
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Bubba",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Cuddles",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Jack",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Luna",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Cookie",
+  // 10 de Pixel Art con personajes (Pixel Art)
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Mario",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Luigi",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Peach",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Yoshi",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Bowser",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Link",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Zelda",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Samus",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Kirby",
+  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Cloud"
 ];
 
 export default function ProfilePage() {
@@ -128,22 +129,22 @@ export default function ProfilePage() {
   const displayName = profile?.nickname || user?.user_metadata?.nickname || user?.email?.split('@')[0];
 
   return (
-    <div className="py-12 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="py-6 sm:py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-2xl mx-auto">
-        <header className="mb-12 text-center">
+        <header className="mb-8 sm:mb-12 text-center">
           <div className="relative inline-block group">
-            <div className="w-32 h-32 bg-white dark:bg-zinc-800 rounded-[3rem] shadow-2xl overflow-hidden border-4 border-blue-600 mb-6 mx-auto transform -rotate-3 transition-transform hover:rotate-0">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 bg-white dark:bg-zinc-800 rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden border-4 border-blue-600 mb-6 mx-auto transform -rotate-3 transition-transform hover:rotate-0">
               <img src={selectedAvatar || AVATARS[0]} alt="Avatar" className="w-full h-full object-cover p-2" />
             </div>
           </div>
-          <h1 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{displayName}</h1>
+          <h1 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{displayName}</h1>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] mt-2">{user?.email}</p>
           <p className="text-[10px] text-blue-600 font-black uppercase tracking-[0.3em] mt-4">Gestión de Perfil</p>
         </header>
 
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {/* STATS GRID */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800 text-center shadow-sm">
               <span className="text-3xl font-black text-blue-600 block leading-none mb-2">{stats.points}</span>
               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Puntos</span>
@@ -171,8 +172,8 @@ export default function ProfilePage() {
               
               {/* AVATAR SELECTOR */}
               <div className="mb-10">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6">Elige tu Avatar (Estilo Pixel Art)</label>
-                <div className="grid grid-cols-5 gap-3 sm:gap-4">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6">Elige tu Avatar (Originales o Pixel Art)</label>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 sm:gap-4">
                   {AVATARS.map((avatar, idx) => (
                     <button 
                       key={idx} 
