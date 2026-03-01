@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Ranking Global | FIFA 2026",
@@ -12,10 +13,12 @@ export default async function RankingPage({
   searchParams: Promise<{ pool?: string }>;
 }) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
+
   const resolvedSearchParams = await searchParams;
   const selectedPoolId = resolvedSearchParams.pool;
-
-  const { data: { user } } = await supabase.auth.getUser();
 
   // 1. Fetch user's pools for the tabs
   let myPools: any[] = [];
