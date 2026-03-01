@@ -108,7 +108,7 @@ export default async function RankingPage({
               href={`/ranking?pool=${p.pool_id}`} 
               className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
-              {Array.isArray(p.pools) ? p.pools[0]?.name : p.pools?.name}
+              {(p.pools as any)?.name}
             </Link>
           ))}
         </div>
