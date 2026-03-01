@@ -91,11 +91,14 @@ export default async function Home({
             </div>
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <span className="bg-blue-600 text-white px-2 py-0.5 text-[9px] font-black rounded uppercase tracking-widest">Official</span>
+                <span className="bg-blue-600 text-white px-2 py-0.5 text-[9px] font-black rounded uppercase tracking-widest">TORNEO</span>
                 <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Copa del Mundo</h2>
               </div>
-              <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">PREDICCIONES</h1>
+              <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
+                FIFA <span className="text-blue-600">COPA DEL MUNDO</span>
+              </h1>
             </div>
+
           </div>
           {user && (
             <div className="bg-white dark:bg-zinc-900 px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center gap-6">
