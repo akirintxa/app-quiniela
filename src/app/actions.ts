@@ -23,9 +23,8 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
   if (!user) throw new Error('Debes iniciar sesión');
 
   const { data: match } = await supabase.from('matches').select('is_locked, is_finished, start_time, team_a_id, team_b_id').eq('id', matchId).single();
-  
   if (!match) throw new Error('Partido no encontrado');
-
+  
   if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
     throw new Error('Cerrado');
   }
@@ -53,7 +52,6 @@ export async function randomizeGroupPredictions(groupId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  // 1. Get all matches for this group
   const { data: matches } = await supabase
     .from('matches')
     .select('*')
@@ -63,18 +61,15 @@ export async function randomizeGroupPredictions(groupId: string) {
 
   if (!matches || matches.length === 0) return;
 
-  // 2. Generate random predictions
   const predictions = matches.map(match => {
-    const scoreA = Math.floor(Math.random() * 4); // 0-3 goals
+    const scoreA = Math.floor(Math.random() * 4);
     const scoreB = Math.floor(Math.random() * 4);
-    
     let winnerId = null;
     if (match.stage !== 'group' && scoreA === scoreB) {
       winnerId = Math.random() > 0.5 ? match.team_a_id : match.team_b_id;
     } else {
       winnerId = scoreA > scoreB ? match.team_a_id : (scoreB > scoreA ? match.team_b_id : null);
     }
-
     return {
       user_id: user.id,
       match_id: match.id,
@@ -84,14 +79,84 @@ export async function randomizeGroupPredictions(groupId: string) {
     };
   });
 
-  // 3. Bulk Upsert
   await supabase.from('predictions').upsert(predictions, { onConflict: 'user_id,match_id' });
-
   revalidatePath('/');
   revalidatePath('/groups');
 }
 
-// ADMIN Actions (Keeping existing ones...)
+// USER: Create Pool
+export async function createPool(formData: FormData) {
+  const name = formData.get('name') as string;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const { data: pool } = await supabase.from('pools').insert({ name, creator_id: user.id, invite_code: inviteCode }).select().single();
+  if (pool) await supabase.from('pool_members').insert({ pool_id: pool.id, user_id: user.id, role: 'admin' });
+  revalidatePath('/groups');
+}
+
+// USER: Join Pool
+export async function joinPool(formData: FormData) {
+  const code = (formData.get('code') as string).toUpperCase();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { data: pool } = await supabase.from('pools').select('id').eq('invite_code', code).single();
+  if (pool) await supabase.from('pool_members').upsert({ pool_id: pool.id, user_id: user.id });
+  revalidatePath('/groups');
+}
+
+// USER: Leave Pool
+export async function leavePool(poolId: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { error } = await supabase
+    .from('pool_members')
+    .delete()
+    .eq('pool_id', poolId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+  
+  revalidatePath('/groups');
+  revalidatePath(`/groups/${poolId}`);
+}
+
+// USER: Update Nickname
+export async function updateNickname(formData: FormData) {
+  const nickname = formData.get('nickname') as string;
+  if (!nickname) return { error: 'El apodo es obligatorio' };
+  
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) return { error: 'No autorizado' };
+
+  // 1. Update Auth Metadata
+  const { error: authError } = await supabase.auth.updateUser({ 
+    data: { nickname: nickname } 
+  });
+  
+  if (authError) return { error: 'Error al actualizar metadatos' };
+
+  // 2. Update Public Profiles Table
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({ id: user.id, nickname: nickname });
+
+  if (profileError) return { error: 'Error al actualizar perfil público' };
+
+  revalidatePath('/');
+  revalidatePath('/profile');
+  revalidatePath('/ranking');
+  
+  return { success: true };
+}
+
+// ADMIN Actions
 export async function updateLiveScore(matchId: number, resultA: number, resultB: number) {
   const supabase = await checkAdmin();
   await supabase.from('matches').update({ result_a: resultA, result_b: resultB, is_locked: true }).eq('id', matchId);
@@ -123,35 +188,4 @@ export async function toggleMatchLock(matchId: number, isLocked: boolean) {
   const supabase = await checkAdmin();
   await supabase.from('matches').update({ is_locked: isLocked }).eq('id', matchId);
   revalidatePath('/'); revalidatePath('/admin');
-}
-
-export async function createPool(formData: FormData) {
-  const name = formData.get('name') as string;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const { data: pool } = await supabase.from('pools').insert({ name, creator_id: user.id, invite_code: inviteCode }).select().single();
-  if (pool) await supabase.from('pool_members').insert({ pool_id: pool.id, user_id: user.id, role: 'admin' });
-  revalidatePath('/groups');
-}
-
-export async function joinPool(formData: FormData) {
-  const code = (formData.get('code') as string).toUpperCase();
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  const { data: pool } = await supabase.from('pools').select('id').eq('invite_code', code).single();
-  if (pool) await supabase.from('pool_members').upsert({ pool_id: pool.id, user_id: user.id });
-  revalidatePath('/groups');
-}
-
-export async function updateNickname(formData: FormData) {
-  const nickname = formData.get('nickname') as string;
-  if (!nickname) return;
-  const supabase = await createClient();
-  await supabase.auth.updateUser({ data: { nickname } });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) await supabase.from('profiles').upsert({ id: user.id, nickname });
-  revalidatePath('/'); revalidatePath('/profile');
 }
