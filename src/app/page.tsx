@@ -120,6 +120,7 @@ export default async function Home({
              <div className="relative z-10">
               <h3 className="text-xl font-black mb-1 uppercase tracking-tighter">¡Bienvenido! 🚀</h3>
               <p className="text-blue-100 mb-4 font-bold uppercase text-[9px] tracking-widest opacity-80">Elige tu apodo para competir</p>
+              {/* Form wrapper to fix TS void return type error */}
               <form action={async (formData) => {
                 'use server';
                 await updateNickname(formData);
