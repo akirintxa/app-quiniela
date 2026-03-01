@@ -10,9 +10,13 @@ export default async function Navbar() {
     <nav className="sticky top-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-zinc-800 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto h-20 flex justify-between items-center">
         {/* Logo */}
-        <Link href="/" className="group flex items-center gap-2">
-          <span className="text-3xl font-black text-blue-600 dark:text-blue-500 tracking-tighter group-hover:scale-110 transition-transform">Q26</span>
+        <Link href="/" className="group flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform -rotate-3 group-hover:rotate-0 transition-transform">
+            <span className="text-lg font-black text-white tracking-tighter">Q26</span>
+          </div>
+          <span className="hidden sm:block text-xs font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">Quiniela</span>
         </Link>
+
 
         {/* Links */}
         <div className="flex items-center gap-4 sm:gap-8">

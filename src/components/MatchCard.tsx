@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -24,7 +25,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const [groupPredictions, setGroupPredictions] = useState<any[]>([]);
   const [loadingSpy, setLoadingSpy] = useState(false);
 
-  // Sync state with props when they change (critical for Randomize feature)
   useEffect(() => {
     setScoreA(initialPrediction?.predicted_a ?? "");
     setScoreB(initialPrediction?.predicted_b ?? "");
@@ -42,29 +42,31 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const isKnockout = match.stage !== "group";
   const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
 
+  const getFlagUrl = (iso: string) => {
+    if (!iso) return null;
+    const cleanIso = iso.toLowerCase();
+    
+    // Special cases for UK nations in flagcdn
+    if (cleanIso === 'gb-sct') return `https://flagcdn.com/w80/gb-sct.png`; // Scotland
+    if (cleanIso === 'gb-eng') return `https://flagcdn.com/w80/gb-eng.png`; // England
+    if (cleanIso === 'gb-wls') return `https://flagcdn.com/w80/gb-wls.png`; // Wales
+    
+    // Only return for standard 2-letter codes
+    if (iso.length !== 2) return null; 
+    return `https://flagcdn.com/w80/${cleanIso}.png`;
+  };
+
   const handleSave = async () => {
     if (!userId || isLocked) return;
     if (scoreA === "" || scoreB === "") return;
-    // If it's a draw in knockout, a winner MUST be selected
     if (isKnockout && isDraw && !winnerId) {
       alert("En eliminatorias, debes elegir quién pasa de ronda.");
       return;
     }
 
     setLoading(true);
-    const supabase = createClient();
     try {
-      const { error } = await supabase
-        .from('predictions')
-        .upsert({
-          user_id: userId,
-          match_id: match.id,
-          predicted_a: Number(scoreA),
-          predicted_b: Number(scoreB),
-          predicted_winner_id: isDraw ? winnerId : (Number(scoreA) > Number(scoreB) ? match.team_a_id : match.team_b_id)
-        }, { onConflict: 'user_id,match_id' });
-
-      if (error) throw error;
+      await savePrediction(match.id, Number(scoreA), Number(scoreB), winnerId);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
@@ -87,6 +89,31 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     setLoadingSpy(false);
   };
 
+  const TeamIcon = ({ team, isSelected }: { team: any, isSelected?: boolean }) => {
+    const flag = getFlagUrl(team?.iso_code);
+    return (
+      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
+        {flag ? (
+          <img 
+            src={flag} 
+            alt={team.name} 
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              // Fallback if image fails to load
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement!.classList.add('bg-zinc-200', 'dark:bg-zinc-700');
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center w-full h-full bg-zinc-100 dark:bg-zinc-800">
+            <span className="text-2xl mb-1">⚽</span>
+            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-tighter">{team?.iso_code}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-sm border transition-all overflow-hidden ${
       isFinished ? 'border-blue-500 ring-4 ring-blue-500/10' : 
@@ -103,7 +130,7 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
         <div className="flex flex-col items-center">
           <div className="flex justify-between w-full mb-8">
             <span className="text-[9px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-lg">
-              {match.stage.replace("_", " ")}
+              {match.stage.replace("_", " ")} {match.group_id ? `• Grupo ${match.group_id}` : ""}
             </span>
             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
               {startTime.toLocaleDateString([], { day: '2-digit', month: 'short' })} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -111,8 +138,8 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
           </div>
 
           {(match.result_a !== null || match.result_b !== null) && (
-            <div className="mb-6 flex flex-col items-center animate-in fade-in zoom-in duration-500">
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{isLive ? 'Marcador Live' : 'Final'}</span>
+            <div className="mb-6 flex flex-col items-center">
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{isLive ? 'Marcador Live' : 'Resultado Real'}</span>
               <div className={`flex items-center gap-4 px-6 py-2 rounded-2xl border ${isLive ? 'bg-red-50 border-red-100 dark:bg-red-950/20' : 'bg-gray-50 border-gray-100 dark:bg-zinc-800'}`}>
                 <span className={`text-3xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>{match.result_a}</span>
                 <span className="text-gray-300 font-black">-</span>
@@ -125,16 +152,15 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             <button 
               disabled={!isDraw || isLocked || !isKnockout}
               onClick={() => setWinnerId(match.team_a_id)}
-              className={`flex-1 flex flex-col items-center text-center p-4 rounded-3xl transition-all ${winnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 shadow-lg' : 'border-2 border-transparent'}`}
+              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <div className="w-14 h-14 bg-gray-50 dark:bg-zinc-800 rounded-[1.5rem] flex items-center justify-center mb-3 font-black text-gray-400 text-sm border border-gray-100 dark:border-zinc-700 shadow-sm">
-                {match.team_a?.iso_code || "?"}
-              </div>
+              <TeamIcon team={match.team_a} isSelected={winnerId === match.team_a_id && isDraw} />
               <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter truncate w-full">{teamAName}</span>
-              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600">Pasa de ronda?</span>}
+              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
 
             <div className="flex flex-col items-center gap-1">
+              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Tu Pronóstico</span>
               <div className="flex items-center gap-2">
                 <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
                 <span className="text-gray-300 font-black">:</span>
@@ -148,13 +174,11 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             <button 
               disabled={!isDraw || isLocked || !isKnockout}
               onClick={() => setWinnerId(match.team_b_id)}
-              className={`flex-1 flex flex-col items-center text-center p-4 rounded-3xl transition-all ${winnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 shadow-lg' : 'border-2 border-transparent'}`}
+              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <div className="w-14 h-14 bg-gray-50 dark:bg-zinc-800 rounded-[1.5rem] flex items-center justify-center mb-3 font-black text-gray-400 text-sm border border-gray-100 dark:border-zinc-700 shadow-sm">
-                {match.team_b?.iso_code || "?"}
-              </div>
+              <TeamIcon team={match.team_b} isSelected={winnerId === match.team_b_id && isDraw} />
               <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter truncate w-full">{teamBName}</span>
-              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600">Pasa de ronda?</span>}
+              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
           </div>
           
@@ -162,14 +186,14 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             {!userId ? (
               <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl">Login para jugar</div>
             ) : isFinished ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/30">Cerrado</div>
+              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100">Cerrado</div>
             ) : isLocked ? (
               <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 animate-pulse">En Juego</div>
             ) : (
-              <button onClick={handleSave} disabled={loading || scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)} className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${saved ? 'bg-green-500 text-white shadow-green-500/20' : (scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'}`}>{loading ? "..." : saved ? "Guardado" : "Confirmar Pronóstico"}</button>
+              <button onClick={handleSave} disabled={loading || scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)} className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${saved ? 'bg-green-500 text-white shadow-green-500/20' : (scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'}`}>{loading ? "..." : saved ? "¡Listo!" : "Confirmar"}</button>
             )}
             {poolId && (
-              <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900 shadow-lg' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`} title="Espiar">
+              <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             )}
@@ -179,26 +203,28 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
 
       {showSpy && (
         <div className="border-t border-gray-50 dark:border-zinc-800 p-8 bg-gray-50/30 dark:bg-zinc-950/20">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 flex items-center gap-3">Ranking Pronósticos</h4>
-          </div>
+          <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 mb-6 flex items-center gap-3">Ranking de Pronósticos</h4>
           {loadingSpy ? (
-            <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest italic">Hackeando...</div>
+            <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest">Cargando...</div>
           ) : groupPredictions.length > 0 ? (
             <div className="grid grid-cols-1 gap-3">
-              {groupPredictions.map((pred, i) => (
-                <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase">{pred.profiles?.nickname}</span>
-                    {pred.points_won !== null && <span className="text-[8px] font-black text-green-600 uppercase tracking-widest">+{pred.points_won} Pts</span>}
+              {groupPredictions.map((pred, i) => {
+                let displayPoints = pred.points_won;
+                if (isLive) displayPoints = calculatePoints(pred as Prediction, match);
+                return (
+                  <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter">{pred.profiles?.nickname}</span>
+                      {displayPoints !== null && displayPoints !== undefined && <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg">{pred.predicted_a}</span>
+                      <span className="font-black text-gray-200">:</span>
+                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg">{pred.predicted_b}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_a}</span>
-                    <span className="font-black text-gray-200">:</span>
-                    <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_b}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="py-6 text-center text-[9px] font-black text-gray-300 uppercase italic">Nadie ha predicho</p>
