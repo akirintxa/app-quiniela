@@ -23,7 +23,10 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
   if (!user) throw new Error('Debes iniciar sesión');
 
   const { data: match } = await supabase.from('matches').select('is_locked, is_finished, start_time, team_a_id, team_b_id').eq('id', matchId).single();
-  if (match?.is_finished || (match?.is_locked && new Date() > new Date(match?.start_time))) {
+  
+  if (!match) throw new Error('Partido no encontrado');
+
+  if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
     throw new Error('Cerrado');
   }
 
