@@ -2,7 +2,6 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import Navbar from "@/components/Navbar";
 
 export default async function GroupsPage() {
   const supabase = await createClient();
@@ -50,9 +49,7 @@ export default async function GroupsPage() {
   };
 
   return (
-    <>
-      <Navbar />
-      <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-4xl mx-auto">
         <header className="mb-10 text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
@@ -124,6 +121,5 @@ export default async function GroupsPage() {
         </div>
       </div>
     </div>
-    </>
   );
 }

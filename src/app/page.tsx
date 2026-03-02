@@ -6,7 +6,6 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import RandomizeButton from "@/components/RandomizeButton";
 import { calculateStandings } from "@/lib/standings";
-import Navbar from "@/components/Navbar";
 
 export default async function Home({
   searchParams,
@@ -90,18 +89,9 @@ export default async function Home({
   }
 
   const groups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
-  const stages = [
-    { id: "round_32", name: "R32", status: "active" },
-    { id: "round_16", name: "Octavos", status: "soon" },
-    { id: "quarter_final", name: "Cuartos", status: "soon" },
-    { id: "semi_final", name: "Semis", status: "soon" },
-    { id: "final", name: "Final", status: "soon" }
-  ];
 
   return (
-    <>
-      <Navbar />
-      <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-5xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="flex items-start gap-4 sm:gap-6">
@@ -192,6 +182,5 @@ export default async function Home({
         </section>
       </div>
     </div>
-    </>
   );
 }

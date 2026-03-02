@@ -5,8 +5,6 @@ import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { Suspense } from "react";
 
 export default async function GroupDetailPage({
   params,
@@ -37,18 +35,14 @@ export default async function GroupDetailPage({
   const { data: profilesData } = await supabase.from('profiles').select('id, nickname, avatar_url, teams:favorite_team_id (iso_code)').in('id', memberIds);
   const { data: predictionsData } = await supabase.from('predictions').select('user_id, points_won, match_id').in('user_id', memberIds);
 
-  // 2. Trend Logic (Last Finished Match)
+  // 2. Trend Logic
   const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
   const lastMatchId = finishedMatches?.[0]?.id;
 
   const userMap: Record<string, any> = {};
   const currentScores: Record<string, number> = {};
   const previousScores: Record<string, number> = {};
-
-  memberIds.forEach(id => {
-    currentScores[id] = 0;
-    previousScores[id] = 0;
-  });
+  memberIds.forEach(id => { currentScores[id] = 0; previousScores[id] = 0; });
 
   predictionsData?.forEach(p => {
     if (currentScores[p.user_id] !== undefined) {
@@ -70,20 +64,12 @@ export default async function GroupDetailPage({
       if (curPos < prePos) trend = 'up';
       else if (curPos > prePos) trend = 'down';
     }
-    userMap[p.id] = { 
-      id: p.id,
-      nickname: p.nickname || 'Usuario', 
-      avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`,
-      flag: (p.teams as any)?.iso_code,
-      points: currentScores[p.id],
-      trend,
-      isMe: p.id === user.id 
-    };
+    userMap[p.id] = { id: p.id, nickname: p.nickname || 'Usuario', avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, flag: (p.teams as any)?.iso_code, points: currentScores[p.id], trend, isMe: p.id === user.id };
   });
 
   const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
 
-  // 3. History Modal Logic
+  // 3. History modal
   let userHistory: any[] = [];
   let historyProfile = viewUserId ? userMap[viewUserId] : null;
   if (viewUserId && historyProfile) {
@@ -98,7 +84,7 @@ export default async function GroupDetailPage({
     }).reverse();
   }
 
-  // 4. Matches Logic (Sorted: Live/Pending first, Finished last)
+  // 4. Matches Logic
   let mQuery = supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`);
   if (view === "today") mQuery = mQuery.order("is_finished", { ascending: true }).order("start_time", { ascending: true }).limit(20);
   else mQuery = mQuery.eq("group_id", selectedGroup).eq("stage", "group").order("is_finished", { ascending: true }).order("start_time", { ascending: true });
@@ -115,10 +101,7 @@ export default async function GroupDetailPage({
   };
 
   return (
-    <>
-      <Navbar />
-      <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
-      {/* MODAL HISTORIAL */}
+    <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
       {viewUserId && historyProfile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-zinc-900 w-full max-w-xl max-h-[85vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-gray-100 dark:border-zinc-800">
@@ -221,6 +204,5 @@ export default async function GroupDetailPage({
         </div>
       </div>
     </div>
-    </>
   );
 }
