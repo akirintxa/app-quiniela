@@ -96,32 +96,28 @@ export default async function Home({
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <Suspense fallback={null}><HomeTabsHandler /></Suspense>
       <div className="max-w-5xl mx-auto">
-        <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="flex items-start gap-4 sm:gap-6">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform -rotate-3">
-              <span className="text-xl sm:text-2xl font-black text-white tracking-tighter">Q26</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <span className="bg-blue-600 text-white px-2 py-0.5 text-[9px] font-black rounded uppercase tracking-widest">TORNEO</span>
-                <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Copa del Mundo 2026</h2>
-              </div>
-              <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">PREDICCIONES <span className="text-blue-600">& RESULTADOS</span></h1>
-            </div>
+        <header className="mb-10 text-center sm:text-left">
+          <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
+            <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">TORNEO</span>
+            <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Copa del Mundo 2026</h2>
           </div>
-          {user && (
-            <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
-              <div className="text-center">
-                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Tu Puntuación</span>
-                <span className="text-2xl font-black text-blue-600 leading-none">{userStats.points}</span>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">PREDICCIONES <span className="text-blue-600">& RESULTADOS</span></h1>
+            
+            {user && (
+              <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
+                <div className="text-center">
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Tu Puntuación</span>
+                  <span className="text-2xl font-black text-blue-600 leading-none">{userStats.points}</span>
+                </div>
+                <div className="w-px h-8 bg-gray-100 dark:bg-zinc-800"></div>
+                <div className="text-center">
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Ranking Global</span>
+                  <span className="text-2xl font-black text-gray-900 dark:text-white leading-none">#{userStats.rank || '--'}</span>
+                </div>
               </div>
-              <div className="w-px h-8 bg-gray-100 dark:bg-zinc-800"></div>
-              <div className="text-center">
-                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Ranking Global</span>
-                <span className="text-2xl font-black text-gray-900 dark:text-white leading-none">#{userStats.rank || '--'}</span>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </header>
 
         <div className="flex flex-col gap-6 mb-10">
@@ -129,14 +125,13 @@ export default async function Home({
             <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
             <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
             <Link href="/?view=results" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
-            {/* <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Fase Final</Link> */}
           </div>
 
           {view === 'groups' && (
-            <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2">
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2">
+              <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
                 {groups.map(g => (
-                  <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-10 h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
+                  <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-full aspect-square sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
                     {g}
                     {user && groupCompletion[g] === false && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 border-2 border-white dark:border-black rounded-full shadow-sm"></span>}
                     {user && groupCompletion[g] === true && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full shadow-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>}
