@@ -5,6 +5,7 @@ import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import Navbar from "@/components/Navbar";
 import { Suspense } from "react";
 
 export default async function GroupDetailPage({
@@ -114,7 +115,9 @@ export default async function GroupDetailPage({
   };
 
   return (
-    <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
+    <>
+      <Navbar />
+      <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
       {/* MODAL HISTORIAL */}
       {viewUserId && historyProfile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
@@ -218,5 +221,6 @@ export default async function GroupDetailPage({
         </div>
       </div>
     </div>
+    </>
   );
 }

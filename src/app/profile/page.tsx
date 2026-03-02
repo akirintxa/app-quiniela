@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from "@/utils/supabase/client";
 import { updateProfile } from "../actions";
+import Navbar from "@/components/Navbar";
 
 const AVATARS = [
   // Los 10 primeros originales (Avataaars)
@@ -129,7 +130,9 @@ export default function ProfilePage() {
   const displayName = profile?.nickname || user?.user_metadata?.nickname || user?.email?.split('@')[0];
 
   return (
-    <div className="py-6 sm:py-12 px-4 sm:px-6 lg:px-8 font-sans">
+    <>
+      <Navbar />
+      <div className="py-6 sm:py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-2xl mx-auto">
         <header className="mb-8 sm:mb-12 text-center">
           <div className="relative inline-block group">
@@ -242,5 +245,6 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

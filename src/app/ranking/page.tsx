@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import RankingTabsHandler from "@/components/RankingTabsHandler";
 import ShareRankingButton from "@/components/ShareRankingButton";
+import Navbar from "@/components/Navbar";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
@@ -149,7 +150,9 @@ export default async function RankingPage({
   };
 
   return (
-    <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
+    <>
+      <Navbar />
+      <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <Suspense fallback={null}><RankingTabsHandler /></Suspense>
       <RealtimeRankingListener />
 
@@ -265,5 +268,6 @@ export default async function RankingPage({
         </div>
       </div>
     </div>
+    </>
   );
 }

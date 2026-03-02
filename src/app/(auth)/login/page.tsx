@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, use, useTransition } from 'react';
+import { useState, use, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { login, signup } from './actions';
 
@@ -12,9 +12,16 @@ export default function LoginPage({
   const resolvedSearchParams = use(searchParams);
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const message = resolvedSearchParams?.message;
-  const isSuccess = message?.includes('completado') || message?.includes('email') || message?.includes('enviado');
+  // Inicializar el mensaje local desde los parámetros de la URL
+  useEffect(() => {
+    if (resolvedSearchParams?.message) {
+      setLocalMessage(resolvedSearchParams.message);
+    }
+  }, [resolvedSearchParams]);
+
+  const isSuccess = localMessage?.includes('completado') || localMessage?.includes('email') || localMessage?.includes('enviado');
 
   const handleFormAction = (action: (formData: FormData) => Promise<any>) => {
     return (formData: FormData) => {
@@ -22,6 +29,11 @@ export default function LoginPage({
         await action(formData);
       });
     };
+  };
+
+  // Función para limpiar el mensaje cuando el usuario interactúa
+  const clearMessage = () => {
+    if (localMessage) setLocalMessage(null);
   };
 
   return (
@@ -49,11 +61,29 @@ export default function LoginPage({
       <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
           <form className="space-y-6">
+            {localMessage && (
+              <div className={`mb-6 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center animate-in fade-in slide-in-from-top-2 ${
+                isSuccess 
+                ? 'bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400' 
+                : 'bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400'
+              }`}>
+                {localMessage}
+              </div>
+            )}
+
             <div>
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1" htmlFor="email">
                 Correo Electrónico
               </label>
-              <input className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" name="email" type="email" placeholder="tu@email.com" required />
+              <input 
+                onFocus={clearMessage}
+                onChange={clearMessage}
+                className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" 
+                name="email" 
+                type="email" 
+                placeholder="tu@email.com" 
+                required 
+              />
             </div>
 
             <div>
@@ -64,7 +94,15 @@ export default function LoginPage({
                 <Link href="/forgot-password" className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-500">¿La olvidaste?</Link>
               </div>
               <div className="relative">
-                <input className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all pr-12" type={showPassword ? "text" : "password"} name="password" placeholder="••••••••" required />
+                <input 
+                  onFocus={clearMessage}
+                  onChange={clearMessage}
+                  className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all pr-12" 
+                  type={showPassword ? "text" : "password"} 
+                  name="password" 
+                  placeholder="••••••••" 
+                  required 
+                />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors">
                   {showPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.1 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
@@ -91,16 +129,6 @@ export default function LoginPage({
                 {isPending ? 'Registrando...' : 'Registrarme ahora'}
               </button>
             </div>
-
-            {message && (
-              <div className={`mt-6 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center animate-in fade-in slide-in-from-top-2 ${
-                isSuccess 
-                ? 'bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400' 
-                : 'bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400'
-              }`}>
-                {message}
-              </div>
-            )}
           </form>
         </div>
         <p className="mt-8 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Juega con responsabilidad • FIFA 2026</p>
