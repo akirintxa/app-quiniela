@@ -36,20 +36,28 @@ export default async function RankingPage({
 
   // 2. Fetch Players
   let targetUserIds: string[] = [];
-  if (selectedPoolId) {
+  if (selectedPoolId && selectedPoolId !== 'all') {
     const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', Number(selectedPoolId));
     if (members) targetUserIds = members.map(m => m.user_id);
   } else {
     const { data: allProfiles } = await supabase.from('profiles').select('id');
-    if (allProfiles) targetUserIds = allProfiles.map(p => p.id);
+    const profileIds = allProfiles?.map(p => p.id) || [];
+    const { data: allPredictors } = await supabase.from('predictions').select('user_id');
+    const predictorIds = allPredictors?.map(p => p.user_id) || [];
+    targetUserIds = Array.from(new Set([...profileIds, ...predictorIds]));
   }
 
   // 3. Fetch Matches and Predictions
   const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
   const lastMatchId = finishedMatches?.[0]?.id;
 
-  const { data: profilesData } = await supabase.from('profiles').select('id, nickname, avatar_url, teams:favorite_team_id (iso_code)').in('id', targetUserIds);
-  const { data: predictionsData } = await supabase.from('predictions').select('user_id, points_won, match_id').in('user_id', targetUserIds);
+  const { data: profilesData } = targetUserIds.length > 0 
+    ? await supabase.from('profiles').select('id, nickname, avatar_url, teams:favorite_team_id (iso_code)').in('id', targetUserIds)
+    : { data: [] };
+
+  const { data: predictionsData } = targetUserIds.length > 0
+    ? await supabase.from('predictions').select('user_id, points_won, match_id').in('user_id', targetUserIds)
+    : { data: [] };
 
   // 4. Calculate Trends
   const currentScores: Record<string, number> = {};
@@ -117,7 +125,7 @@ export default async function RankingPage({
                 <img src={historyProfile.avatar} alt="av" className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-blue-500 shadow-lg" />
                 <div><h3 className="font-black text-xl uppercase tracking-tighter">{historyProfile.nickname}</h3><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Resumen de Jornadas</p></div>
               </div>
-              <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}` : '/ranking'} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
+              <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}` : '/ranking?pool=all'} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </Link>
             </div>
@@ -149,7 +157,7 @@ export default async function RankingPage({
         </header>
 
         <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar">
-          <Link href="/ranking" className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${!selectedPoolId ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Global</Link>
+          <Link href="/ranking?pool=all" className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${(!selectedPoolId || selectedPoolId === 'all') ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Global</Link>
           {myPools?.map(p => (
             <Link key={p.pool_id} href={`/ranking?pool=${p.pool_id}`} className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>{(p.pools as any)?.name}</Link>
           ))}
@@ -177,7 +185,7 @@ export default async function RankingPage({
               {sortedRanking.map((member, index) => (
                 <tr key={index}>
                   <td className="p-0" colSpan={3}>
-                    <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}&view_user=${member.id}` : `/ranking?view_user=${member.id}`} className={`flex items-center w-full px-6 py-5 transition-all group ${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
+                    <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}&view_user=${member.id}` : `/ranking?pool=all&view_user=${member.id}`} className={`flex items-center w-full px-6 py-5 transition-all group ${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
                       <div className="w-16 text-center flex-shrink-0 flex flex-col items-center">
                         <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${index === 0 && !member.isMe ? 'bg-yellow-400 text-yellow-950' : member.isMe ? 'bg-white/20' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'}`}>{index + 1}</span>
                         <div className="mt-1 flex items-center justify-center h-4">

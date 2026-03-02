@@ -148,26 +148,28 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             </div>
           )}
 
-          <div className="flex items-center justify-between w-full gap-4 mb-8">
+          <div className="flex items-center justify-between w-full gap-2 sm:gap-4 mb-8">
             <button 
               disabled={!isDraw || isLocked || !isKnockout}
               onClick={() => setWinnerId(match.team_a_id)}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
               <TeamIcon team={match.team_a} isSelected={winnerId === match.team_a_id && isDraw} />
-              <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter truncate w-full">{teamAName}</span>
+              <div className="h-8 flex items-center justify-center">
+                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
+              </div>
               {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
 
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1 flex-shrink-0">
               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">{isFinished ? 'Tu Pronóstico' : 'Tu Predicción'}</span>
-              <div className="flex items-center gap-2">
-                <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
                 <span className="text-gray-300 font-black">:</span>
-                <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-14 h-14 text-center text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+                <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
               </div>
               {initialPrediction?.points_won !== null && initialPrediction?.points_won !== undefined && isFinished && (
-                <div className="mt-3 px-4 py-1 bg-green-100 text-green-700 rounded-full text-[9px] font-black uppercase tracking-widest animate-in zoom-in duration-300">+{initialPrediction?.points_won} Puntos</div>
+                <div className="mt-3 px-3 py-1 bg-green-100 text-green-700 rounded-full text-[8px] font-black uppercase tracking-widest animate-in zoom-in duration-300">+{initialPrediction?.points_won} Puntos</div>
               )}
             </div>
 
@@ -177,7 +179,9 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
               <TeamIcon team={match.team_b} isSelected={winnerId === match.team_b_id && isDraw} />
-              <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter truncate w-full">{teamBName}</span>
+              <div className="h-8 flex items-center justify-center">
+                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>
+              </div>
               {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
           </div>

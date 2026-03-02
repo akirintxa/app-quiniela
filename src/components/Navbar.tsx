@@ -14,7 +14,7 @@ export default async function Navbar() {
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 transform -rotate-3 group-hover:rotate-0 transition-transform">
             <span className="text-lg font-black text-white tracking-tighter">Q26</span>
           </div>
-          <span className="hidden sm:block text-[10px] font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">FIFA Copa del Mundo</span>
+          <span className="hidden sm:block text-[10px] font-black uppercase tracking-[0.2em] text-gray-900 dark:text-white">Quiniela 2026</span>
         </Link>
 
 

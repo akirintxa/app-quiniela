@@ -139,7 +139,7 @@ export default async function GroupDetailPage({
         </nav>
 
         <header className="mb-16">
-          <h1 className="text-5xl sm:text-6xl font-black uppercase tracking-tighter leading-none">{pool.name}</h1>
+          <h1 className="text-3xl sm:text-6xl font-black uppercase tracking-tighter leading-none">{pool.name}</h1>
           <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-4">Competición Privada • {memberIds.length} Jugadores</p>
         </header>
 

@@ -56,7 +56,7 @@ export default async function GroupsPage() {
             <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">Competición</span>
             <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em]">Ligas Privadas</h2>
           </div>
-          <h1 className="text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
             MIS <span className="text-blue-600 dark:text-blue-500">GRUPOS</span>
           </h1>
         </header>
