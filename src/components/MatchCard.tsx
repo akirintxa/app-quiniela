@@ -41,6 +41,14 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const isKnockout = match.stage !== "group";
   const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
 
+  // NUEVA LÓGICA: ¿Ha cambiado el usuario los valores respecto a lo guardado?
+  const isModified = 
+    scoreA !== (initialPrediction?.predicted_a ?? "") || 
+    scoreB !== (initialPrediction?.predicted_b ?? "") ||
+    winnerId !== (initialPrediction?.predicted_winner_id ?? null);
+
+  const hasData = scoreA !== "" && scoreB !== "";
+
   const getFlagUrl = (iso: string) => {
     if (!iso) return null;
     const cleanIso = iso.toLowerCase();
@@ -194,7 +202,18 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             ) : isLocked ? (
               <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 animate-pulse">En Juego</div>
             ) : (
-              <button onClick={handleSave} disabled={loading || scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)} className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${saved ? 'bg-green-500 text-white shadow-green-500/20' : (scoreA === "" || scoreB === "" || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'}`}>{loading ? "..." : saved ? "¡Listo!" : "Confirmar"}</button>
+              <button 
+                onClick={handleSave} 
+                disabled={loading || !hasData || !isModified || (isKnockout && isDraw && !winnerId)} 
+                className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${
+                  saved ? 'bg-green-500 text-white shadow-green-500/20' : 
+                  (!isModified && hasData) ? 'bg-gray-50 dark:bg-zinc-800 text-gray-400 border border-gray-100 dark:border-zinc-700 shadow-none cursor-default' :
+                  (!hasData || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 
+                  'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'
+                }`}
+              >
+                {loading ? "..." : saved ? "¡Listo!" : (!isModified && hasData) ? "Guardado" : "Confirmar"}
+              </button>
             )}
             {poolId && (
               <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
