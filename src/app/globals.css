@@ -24,3 +24,8 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Ocultar Navbar en páginas de autenticación (Login, Registro, Password) */
+body:has(.min-h-screen.flex.flex-col.justify-center) nav {
+  display: none;
+}

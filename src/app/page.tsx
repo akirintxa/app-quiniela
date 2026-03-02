@@ -6,6 +6,8 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import RandomizeButton from "@/components/RandomizeButton";
 import { calculateStandings } from "@/lib/standings";
+import HomeTabsHandler from "@/components/HomeTabsHandler";
+import { Suspense } from "react";
 
 export default async function Home({
   searchParams,
@@ -14,7 +16,7 @@ export default async function Home({
 }) {
   const supabase = await createClient();
   const resolvedSearchParams = await searchParams;
-  const view = resolvedSearchParams.view || "today";
+  const view = resolvedSearchParams.view || "groups";
   const selectedGroup = resolvedSearchParams.group || "A";
   const selectedStage = resolvedSearchParams.stage || "round_32";
 
@@ -92,6 +94,7 @@ export default async function Home({
 
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
+      <Suspense fallback={null}><HomeTabsHandler /></Suspense>
       <div className="max-w-5xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="flex items-start gap-4 sm:gap-6">
@@ -123,9 +126,9 @@ export default async function Home({
 
         <div className="flex flex-col gap-6 mb-10">
           <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit self-center sm:self-start overflow-x-auto shadow-sm">
+            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
             <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
             <Link href="/?view=results" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
-            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
             {/* <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Fase Final</Link> */}
           </div>
 

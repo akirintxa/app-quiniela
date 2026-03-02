@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "ADMIN | Panel de Control FIFA 2026",
+  title: "Q26 - Admin",
 };
 
 export default async function AdminPage({
