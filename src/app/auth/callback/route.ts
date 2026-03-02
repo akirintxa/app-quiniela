@@ -13,9 +13,12 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`)
+    }
   }
 
-  // URL to redirect to after sign up process completes
-  return NextResponse.redirect(`${origin}${next}`)
+  // return the user to an error page with instructions
+  return NextResponse.redirect(`${origin}/login?message=Could not login with email link`)
 }

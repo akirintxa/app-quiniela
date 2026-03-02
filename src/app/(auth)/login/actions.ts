@@ -17,7 +17,7 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    return redirect('/login?message=Could not authenticate user')
+    return redirect(`/login?message=${encodeURIComponent(error.message)}`)
   }
 
   revalidatePath('/', 'layout')
@@ -39,10 +39,10 @@ export async function signup(formData: FormData) {
   })
 
   if (error) {
-    return redirect('/login?message=Could not authenticate user')
+    return redirect(`/login?message=${encodeURIComponent(error.message)}`)
   }
 
-  return redirect('/login?message=Check email to continue sign in process')
+  return redirect('/login?message=¡Registro casi completado! Revisa tu email para activar tu cuenta.')
 }
 
 export async function forgotPassword(formData: FormData) {

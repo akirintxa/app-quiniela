@@ -60,7 +60,8 @@ export default async function Home({
 
   // Fetch matches for rendering
   let query = supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`);
-  if (view === "today") query = query.order("start_time", { ascending: true }).limit(12);
+  if (view === "today") query = query.eq("is_finished", false).order("start_time", { ascending: true }).limit(12);
+  else if (view === "results") query = query.eq("is_finished", true).order("start_time", { ascending: false }).limit(24);
   else if (view === "groups") query = query.eq("group_id", selectedGroup).eq("stage", "group").order("start_time", { ascending: true });
   else if (view === "knockout") query = query.eq("stage", selectedStage).order("start_time", { ascending: true });
   const { data: matches } = await query;
@@ -79,7 +80,7 @@ export default async function Home({
   }
 
   const groupedMatches: Record<string, Match[]> = {};
-  if (view === "today" && matches) {
+  if ((view === "today" || view === "results") && matches) {
     matches.forEach(match => {
       const date = new Date(match.start_time).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
       if (!groupedMatches[date]) groupedMatches[date] = [];
@@ -130,8 +131,9 @@ export default async function Home({
         <div className="flex flex-col gap-6 mb-10">
           <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit self-center sm:self-start overflow-x-auto shadow-sm">
             <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
-            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Fase de Grupos</Link>
-            <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Eliminatorias</Link>
+            <Link href="/?view=results" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
+            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
+            {/* <Link href={`/?view=knockout&stage=${selectedStage}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Fase Final</Link> */}
           </div>
 
           {view === 'groups' && (
@@ -159,7 +161,7 @@ export default async function Home({
             </div>
           )}
 
-          {view === "today" ? (
+          {(view === "today" || view === "results") ? (
             Object.entries(groupedMatches).map(([date, dayMatches]) => (
               <div key={date} className="space-y-6">
                 <div className="flex items-center gap-4 text-gray-400">

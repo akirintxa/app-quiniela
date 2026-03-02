@@ -26,12 +26,19 @@ export default async function Navbar() {
           </div>
           
           {user ? (
-            <Link href="/profile" className="flex items-center gap-3 bg-gray-50 dark:bg-zinc-900 p-1 rounded-full border border-gray-100 dark:border-zinc-800 shadow-sm pl-4 pr-2 hover:border-blue-500 transition-all group">
-              <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter group-hover:text-blue-600">{displayName}</span>
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-[10px] font-black text-white">
-                {displayName?.substring(0, 1).toUpperCase()}
-              </div>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/profile" className="flex items-center gap-3 bg-gray-50 dark:bg-zinc-900 p-1 rounded-full border border-gray-100 dark:border-zinc-800 shadow-sm pl-4 pr-2 hover:border-blue-500 transition-all group">
+                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter group-hover:text-blue-600">{displayName}</span>
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-[10px] font-black text-white">
+                  {displayName?.substring(0, 1).toUpperCase()}
+                </div>
+              </Link>
+              <form action="/auth/signout" method="post">
+                <button className="w-10 h-10 flex items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all border border-red-100 dark:bg-red-950/20 dark:border-red-900/30 shadow-sm" title="Cerrar Sesión">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </button>
+              </form>
+            </div>
           ) : (
             <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-full text-[10px] font-black transition-all shadow-lg shadow-blue-500/20 active:scale-95 uppercase tracking-widest">
               Entrar

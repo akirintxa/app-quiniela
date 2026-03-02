@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, use } from 'react';
+import { useState, use, useTransition } from 'react';
 import Link from 'next/link';
 import { login, signup } from './actions';
 
@@ -12,6 +11,18 @@ export default function LoginPage({
 }) {
   const resolvedSearchParams = use(searchParams);
   const [showPassword, setShowPassword] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const message = resolvedSearchParams?.message;
+  const isSuccess = message?.includes('completado') || message?.includes('email') || message?.includes('enviado');
+
+  const handleFormAction = (action: (formData: FormData) => Promise<any>) => {
+    return (formData: FormData) => {
+      startTransition(async () => {
+        await action(formData);
+      });
+    };
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black flex flex-col justify-center py-12 px-6 lg:px-8 font-sans">
@@ -65,13 +76,29 @@ export default function LoginPage({
             </div>
 
             <div className="flex flex-col gap-3 pt-2">
-              <button formAction={login} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Entrar a la Cancha</button>
-              <button formAction={signup} className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95">Registrarme ahora</button>
+              <button 
+                formAction={handleFormAction(login)} 
+                disabled={isPending} 
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+              >
+                {isPending ? 'Preparando...' : 'Entrar a la Cancha'}
+              </button>
+              <button 
+                formAction={handleFormAction(signup)} 
+                disabled={isPending} 
+                className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isPending ? 'Registrando...' : 'Registrarme ahora'}
+              </button>
             </div>
 
-            {resolvedSearchParams?.message && (
-              <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 text-center rounded-2xl text-[10px] font-black uppercase tracking-widest">
-                {resolvedSearchParams.message}
+            {message && (
+              <div className={`mt-6 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center animate-in fade-in slide-in-from-top-2 ${
+                isSuccess 
+                ? 'bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400' 
+                : 'bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400'
+              }`}>
+                {message}
               </div>
             )}
           </form>
