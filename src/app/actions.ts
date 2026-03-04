@@ -9,8 +9,11 @@ import { Match, Prediction } from '@/types';
 async function checkAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (!user || !adminEmail || user.email !== adminEmail) {
+  
+  // Convertimos el string de env var en un array de correos limpios
+  const adminEmails = process.env.ADMIN_EMAIL?.split(',').map(e => e.trim()) || [];
+  
+  if (!user || !user.email || !adminEmails.includes(user.email)) {
     throw new Error('Unauthorized');
   }
   return supabase;

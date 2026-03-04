@@ -1,16 +1,59 @@
 'use client';
 
-import { use } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { forgotPassword } from '../login/actions';
 
-export default function ForgotPasswordPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ message: string }>;
-}) {
-  const resolvedSearchParams = use(searchParams);
+function ForgotPasswordContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [message, setMessage] = useState<string | null>(searchParams.get('message'));
 
+  useEffect(() => {
+    setMessage(searchParams.get('message'));
+  }, [searchParams]);
+
+  const clearMessage = () => {
+    if (message) {
+      setMessage(null);
+      router.replace('/forgot-password');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
+      <form className="space-y-6">
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1" htmlFor="email">
+            Correo Electrónico
+          </label>
+          <input 
+            className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" 
+            name="email" 
+            type="email" 
+            placeholder="tu@email.com" 
+            onFocus={clearMessage}
+            onChange={clearMessage}
+            required 
+          />
+        </div>
+
+        <div className="pt-2">
+          <button formAction={forgotPassword} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Enviar Enlace</button>
+        </div>
+
+        {message && (
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-center rounded-2xl text-[10px] font-black uppercase tracking-widest animate-in fade-in slide-in-from-top-1">
+            {message}
+          </div>
+        )}
+      </form>
+    </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black flex flex-col justify-center py-12 px-6 lg:px-8 font-sans">
       <Link
@@ -34,26 +77,9 @@ export default function ForgotPasswordPage({
       </div>
 
       <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
-          <form className="space-y-6">
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1" htmlFor="email">
-                Correo Electrónico
-              </label>
-              <input className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" name="email" type="email" placeholder="tu@email.com" required />
-            </div>
-
-            <div className="pt-2">
-              <button formAction={forgotPassword} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Enviar Enlace</button>
-            </div>
-
-            {resolvedSearchParams?.message && (
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-center rounded-2xl text-[10px] font-black uppercase tracking-widest">
-                {resolvedSearchParams.message}
-              </div>
-            )}
-          </form>
-        </div>
+        <Suspense fallback={<div className="p-12 text-center opacity-50 font-black text-[10px] uppercase tracking-widest">Cargando...</div>}>
+          <ForgotPasswordContent />
+        </Suspense>
       </div>
     </div>
   );

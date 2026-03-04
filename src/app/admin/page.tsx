@@ -18,14 +18,13 @@ export default async function AdminPage({
   const { data: { user } } = await supabase.auth.getUser();
 
   // 1. SECURITY CHECK
-  // Only allow access if user is logged in AND their email matches the ADMIN_EMAIL env var
-  const adminEmail = process.env.ADMIN_EMAIL;
-  
-  if (!user || !adminEmail || user.email !== adminEmail) {
+  // Only allow access if user is logged in AND their email is in the ADMIN_EMAIL list
+  const adminEmails = process.env.ADMIN_EMAIL?.split(',').map(e => e.trim()) || [];
+
+  if (!user || !user.email || !adminEmails.includes(user.email)) {
     // If not admin, redirect to home
     redirect('/');
   }
-
   const resolvedSearchParams = await searchParams;
   const selectedGroup = resolvedSearchParams.group || "A";
 

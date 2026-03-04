@@ -29,12 +29,15 @@ export async function signup(formData: FormData) {
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string
+  
+  // Detectar URL base: Prioridad a env var, luego fallback seguro
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      emailRedirectTo: `${origin}/auth/callback`,
     },
   })
 
@@ -55,10 +58,10 @@ export async function forgotPassword(formData: FormData) {
   })
 
   if (error) {
-    return redirect('/forgot-password?message=Could not reset password')
+    return redirect(`/forgot-password?message=${encodeURIComponent(error.message)}`)
   }
 
-  return redirect('/forgot-password?message=Check email for reset link')
+  return redirect('/forgot-password?message=Revisa tu email para el enlace de recuperación.')
 }
 
 export async function updatePassword(formData: FormData) {
