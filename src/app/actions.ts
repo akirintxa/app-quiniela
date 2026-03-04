@@ -128,6 +128,38 @@ export async function leavePool(poolId: number) {
   revalidatePath(`/groups/${poolId}`);
 }
 
+// USER: Delete Pool (Only for Creator)
+export async function deletePool(poolId: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Verificar que sea el creador
+  const { data: pool } = await supabase.from('pools').select('creator_id').eq('id', poolId).single();
+  
+  if (!pool || pool.creator_id !== user.id) {
+    throw new Error('No tienes permiso para eliminar esta liga');
+  }
+
+  // Eliminar los miembros primero para evitar error de llave foránea
+  const { error: membersError } = await supabase
+    .from('pool_members')
+    .delete()
+    .eq('pool_id', poolId);
+
+  if (membersError) throw membersError;
+
+  // Eliminar la liga
+  const { error } = await supabase
+    .from('pools')
+    .delete()
+    .eq('id', poolId);
+
+  if (error) throw error;
+
+  revalidatePath('/groups');
+  return { success: true };
+  }
 // USER: Update Profile
 export async function updateProfile(formData: FormData) {
   const nickname = formData.get('nickname') as string;

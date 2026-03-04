@@ -3,6 +3,7 @@ import { Match, Prediction } from "@/types";
 import MatchCard from "@/components/MatchCard";
 import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
+import DeletePoolButton from "@/components/DeletePoolButton";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -28,6 +29,9 @@ export default async function GroupDetailPage({
 
   const { data: membership } = await supabase.from('pool_members').select('*').eq('pool_id', poolId).eq('user_id', user.id).single();
   if (!membership) redirect('/groups?error=not-a-member');
+
+  // Permissions
+  const isCreator = pool.creator_id === user.id;
 
   // 1. Fetch Members & Profiles
   const { data: membersData } = await supabase.from('pool_members').select('user_id').eq('pool_id', poolId);
@@ -200,6 +204,10 @@ export default async function GroupDetailPage({
                 return <MatchCard key={match.id} match={match} userId={user.id} initialPrediction={prediction} poolId={poolId} />;
               })}
             </div>
+
+            {isCreator && (
+              <DeletePoolButton poolId={Number(poolId)} />
+            )}
           </div>
         </div>
       </div>

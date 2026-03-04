@@ -8,7 +8,7 @@ import ShareRankingButton from "@/components/ShareRankingButton";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "Q26 - Quiniela",
+  title: "Q26 - La Quiniela",
 };
 
 export default async function RankingPage({

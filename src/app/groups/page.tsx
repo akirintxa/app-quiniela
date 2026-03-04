@@ -2,8 +2,13 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import GroupForms from "@/components/GroupForms";
 
-export default async function GroupsPage() {
+export default async function GroupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ message?: string; error?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -35,17 +40,38 @@ export default async function GroupsPage() {
     const { data: pool } = await supabase.from('pools').insert({ name, creator_id: user.id, invite_code: inviteCode }).select().single();
     if (pool) await supabase.from('pool_members').insert({ pool_id: pool.id, user_id: user.id, role: 'admin' });
     revalidatePath('/groups');
+    redirect('/groups?message=success_create');
   };
 
   const joinPool = async (formData: FormData) => {
     'use server';
-    const code = (formData.get('code') as string).toUpperCase();
+    const code = (formData.get('code') as string).toUpperCase().trim();
+    if (!code) return;
+    
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: pool } = await supabase.from('pools').select('id').eq('invite_code', code).single();
-    if (pool) await supabase.from('pool_members').upsert({ pool_id: pool.id, user_id: user.id });
+
+    const { data: pool } = await supabase.from('pools').select('id').eq('invite_code', code).maybeSingle();
+    if (!pool) return redirect('/groups?error=invalid_code');
+
+    // Verificar si ya es miembro
+    const { data: existingMember } = await supabase
+      .from('pool_members')
+      .select('pool_id')
+      .eq('pool_id', pool.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (existingMember) {
+      return redirect('/groups?error=already_member');
+    }
+
+    const { error: joinError } = await supabase.from('pool_members').upsert({ pool_id: pool.id, user_id: user.id });
+    if (joinError) return redirect('/groups?error=join_failed');
+
     revalidatePath('/groups');
+    redirect(`/groups/${pool.id}`);
   };
 
   return (
@@ -56,40 +82,24 @@ export default async function GroupsPage() {
             <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">MUNDIAL 2026</span>
             <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Ligas Privadas</h2>
           </div>
-
           <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
             MIS <span className="text-blue-600 dark:text-blue-500">GRUPOS</span>
           </h1>
         </header>
 
-        {!hasGroups && (
+        {!hasGroups ? (
           <div className="mb-12 bg-blue-600 rounded-[3rem] p-8 sm:p-12 text-center shadow-2xl shadow-blue-500/20 animate-in fade-in zoom-in duration-500">
             <div className="max-w-xl mx-auto">
               <span className="bg-white/20 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 inline-block">¡Empieza aquí!</span>
               <h2 className="text-2xl sm:text-4xl font-black text-white uppercase tracking-tighter leading-none mb-4">La Quiniela es mejor con amigos</h2>
               <p className="text-blue-100 text-sm font-bold uppercase tracking-tight mb-10 leading-relaxed opacity-90">Crea tu propia liga privada e invita a tus colegas con un código, o únete a una liga ya existente.</p>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white p-6 rounded-[2rem] shadow-lg">
-                  <h3 className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-4">Nueva Liga</h3>
-                  <form action={createPool} className="flex flex-col gap-2">
-                    <input name="name" type="text" placeholder="NOMBRE" className="w-full rounded-xl px-4 py-3 bg-gray-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-black uppercase text-[10px]" required />
-                    <button className="w-full bg-zinc-900 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-black transition-all">Crear ahora</button>
-                  </form>
-                </div>
-                <div className="bg-blue-700/50 p-6 rounded-[2rem] border border-white/10">
-                  <h3 className="text-[9px] font-black text-white uppercase tracking-widest mb-4">Unirse a una</h3>
-                  <form action={joinPool} className="flex flex-col gap-2">
-                    <input name="code" type="text" placeholder="CÓDIGO" className="w-full rounded-xl px-4 py-3 bg-blue-800/50 text-white placeholder:text-blue-300 border-none outline-none focus:ring-2 focus:ring-white/20 font-black text-center uppercase tracking-widest text-[10px]" required />
-                    <button className="w-full bg-white text-blue-600 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-blue-50 transition-all">Unirse</button>
-                  </form>
-                </div>
+              <div className="max-w-md mx-auto">
+                <GroupForms createPool={createPool} joinPool={joinPool} />
               </div>
             </div>
           </div>
-        )}
-
-        {hasGroups && (
+        ) : (
           <div className="space-y-12">
             <section className="space-y-6">
               <div className="grid grid-cols-1 gap-4">
@@ -125,21 +135,8 @@ export default async function GroupsPage() {
               </div>
             </section>
 
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-10 border-t border-gray-100 dark:border-zinc-900 opacity-50 hover:opacity-100 transition-all">
-              <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-sm">
-                <h2 className="text-[10px] font-black mb-6 uppercase tracking-[0.2em] text-gray-400">Nueva Liga</h2>
-                <form action={createPool} className="flex flex-col gap-3">
-                  <input name="name" type="text" placeholder="NOMBRE" className="rounded-xl px-5 py-3 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-black uppercase text-xs" required />
-                  <button className="bg-zinc-900 dark:bg-white text-white dark:text-black py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:opacity-90 transition-all">Crear Grupo</button>
-                </form>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-sm">
-                <h2 className="text-[10px] font-black mb-6 uppercase tracking-[0.2em] text-gray-400">Unirse</h2>
-                <form action={joinPool} className="flex flex-col gap-3">
-                  <input name="code" type="text" placeholder="CÓDIGO" className="rounded-xl px-5 py-3 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-black text-center uppercase tracking-widest text-xs" required />
-                  <button className="bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-blue-700 transition-all">Unirme ahora</button>
-                </form>
-              </div>
+            <section className="pt-10 border-t border-gray-100 dark:border-zinc-900">
+              <GroupForms createPool={createPool} joinPool={joinPool} />
             </section>
           </div>
         )}

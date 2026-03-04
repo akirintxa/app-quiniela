@@ -5,26 +5,39 @@ import { createClient } from "@/utils/supabase/client";
 import { updateProfile } from "../actions";
 
 const AVATARS = [
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Bubba",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Cuddles",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Jack",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Luna",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Milo",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=Cookie",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Mario",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Luigi",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Peach",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Yoshi",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Bowser",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Link",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Zelda",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Samus",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Kirby",
-  "https://api.dicebear.com/7.x/pixel-art/svg?seed=Cloud"
+  // Estilo Dylan (10 variaciones con fondos vibrantes)
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Emma&skinColor=fce5d3&backgroundColor=ff0066&hairColor=ffffff",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Sarah&skinColor=fce5d3&backgroundColor=00ffcc&hairColor=2c1b18",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Lucy&skinColor=fce5d3&backgroundColor=9900ff&hairColor=f9c642",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Mia&skinColor=fce5d3&backgroundColor=ffff00&hairColor=4caf50",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Lily&skinColor=fce5d3&backgroundColor=ff6600&hairColor=ffffff",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Jake&skinColor=fce5d3&backgroundColor=33ff00&hairColor=2c1b18",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Noah&skinColor=fce5d3&backgroundColor=0066ff&hairColor=ffffff",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Ryan&skinColor=fce5d3&backgroundColor=ff00ff&hairColor=2c1b18",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Finn&skinColor=fce5d3&backgroundColor=ff3300&hairColor=ffffff",
+  "https://api.dicebear.com/9.x/dylan/svg?seed=Leo&skinColor=fce5d3&backgroundColor=00ffff&hairColor=2c1b18",
+  // Pixel Art (10 vibrantes)
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Mario&backgroundColor=ff0000",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Peach&backgroundColor=ff66cc",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Zelda&backgroundColor=ffcc00",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Link&backgroundColor=00cc00",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Samus&backgroundColor=ff9900",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Ash&backgroundColor=3399ff",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Misty&backgroundColor=ff0066",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Cloud&backgroundColor=6600ff",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Tifa&backgroundColor=000000",
+  "https://api.dicebear.com/9.x/pixel-art/svg?seed=Lara&backgroundColor=33cc33",
+  // Bottts (10 vibrantes)
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Bender&backgroundColor=ff6600",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Eve&backgroundColor=00ffff",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=R2D2&backgroundColor=0066ff",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Gidget&backgroundColor=ff00ff",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Sparky&backgroundColor=ffff00",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Bolt&backgroundColor=33ff00",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Circuit&backgroundColor=9900ff",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Gear&backgroundColor=ff3300",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Wire&backgroundColor=00ffcc",
+  "https://api.dicebear.com/9.x/bottts/svg?seed=Chip&backgroundColor=ff0066"
 ];
 
 export default function ProfilePage() {

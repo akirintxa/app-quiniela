@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Q26 - Admin",
+  title: "Q26 - Admin - La Quiniela",
 };
 
 export default async function AdminPage({

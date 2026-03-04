@@ -43,7 +43,7 @@ CREATE TABLE pools (
 -- pool_members table
 CREATE TABLE pool_members (
     id SERIAL PRIMARY KEY,
-    pool_id INT REFERENCES pools(id),
+    pool_id INT REFERENCES pools(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id),
     role VARCHAR(10) DEFAULT 'member' -- 'admin' or 'member'
 );

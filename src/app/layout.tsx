@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Q26 - Quiniela",
+  title: "Q26 - La Quiniela",
   description: "Predice los resultados del Mundial 2026 y compite con tus amigos.",
 };
 
