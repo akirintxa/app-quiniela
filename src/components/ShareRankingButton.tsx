@@ -11,7 +11,7 @@ export default function ShareRankingButton({ poolName, poolId }: ShareRankingBut
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
-    const title = 'Quiniela FIFA 2026';
+    const title = 'Quiniela Mundial 2026';
     const text = poolName 
       ? `¡Mira cómo va el ranking en mi grupo "${poolName}" de la Quiniela 2026! 🏆⚽`
       : '¡Mira cómo va el ranking global de la Quiniela 2026! 🏆⚽';

@@ -30,8 +30,8 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     setWinnerId(initialPrediction?.predicted_winner_id ?? null);
   }, [initialPrediction]);
 
-  const teamAName = match.team_a?.name || `Team ${match.team_a_id}`;
-  const teamBName = match.team_b?.name || `Team ${match.team_b_id}`;
+  const teamAName = match.team_a?.name || `Equipo ${match.team_a_id}`;
+  const teamBName = match.team_b?.name || `Equipo ${match.team_b_id}`;
   const startTime = new Date(match.start_time);
   
   const isMatchStarted = new Date() > startTime;
@@ -41,7 +41,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const isKnockout = match.stage !== "group";
   const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
 
-  // NUEVA LÓGICA: ¿Ha cambiado el usuario los valores respecto a lo guardado?
   const isModified = 
     scoreA !== (initialPrediction?.predicted_a ?? "") || 
     scoreB !== (initialPrediction?.predicted_b ?? "") ||
@@ -49,14 +48,29 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
 
   const hasData = scoreA !== "" && scoreB !== "";
 
-  const getFlagUrl = (iso: string) => {
-    if (!iso) return null;
-    const cleanIso = iso.toLowerCase();
-    if (cleanIso === 'gb-sct') return `https://flagcdn.com/w80/gb-sct.png`;
-    if (cleanIso === 'gb-eng') return `https://flagcdn.com/w80/gb-eng.png`;
-    if (cleanIso === 'gb-wls') return `https://flagcdn.com/w80/gb-wls.png`;
-    if (iso.length !== 2) return null; 
-    return `https://flagcdn.com/w80/${cleanIso}.png`;
+  const getStageName = (stage: string, groupId: string | null) => {
+    if (stage === 'group') return groupId ? `Grupo ${groupId}` : 'Fase de Grupos';
+    const stages: Record<string, string> = {
+      'round_32': 'Dieciseisavos',
+      'round_16': 'Octavos',
+      'quarter_final': 'Cuartos',
+      'semi_final': 'Semifinal',
+      'final': 'Final'
+    };
+    return stages[stage] || stage;
+  };
+
+  const getFlagUrl = (team: any) => {
+    if (!team?.iso_code) return null;
+    const name = (team.name || "").toLowerCase();
+    const code = team.iso_code.toLowerCase();
+    
+    if (name.includes("scot") || name.includes("escoc")) return "https://flagcdn.com/w160/gb-sct.png";
+    if (name.includes("engl") || name.includes("ingla")) return "https://flagcdn.com/w160/gb-eng.png";
+    if (name.includes("wale") || name.includes("gale")) return "https://flagcdn.com/w160/gb-wls.png";
+    
+    if (code.length !== 2) return null;
+    return `https://flagcdn.com/w160/${code}.png`;
   };
 
   const handleSave = async () => {
@@ -91,37 +105,36 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     setLoadingSpy(false);
   };
 
+  const BallIcon = ({ size = 28 }: { size?: number }) => (
+    <div className="flex flex-col items-center justify-center w-full h-full bg-gray-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600">
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+        <circle cx="12" cy="12" r="10"/><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z"/><path d="m12 22-3.5-3.5L12 15l3.5 3.5L12 22Z"/><path d="m2 12 3.5-3.5L9 12l-3.5 3.5L2 12Z"/><path d="m22 12-3.5 3.5L15 12l3.5-3.5L22 12Z"/>
+      </svg>
+    </div>
+  );
+
   const TeamIcon = ({ team, isSelected }: { team: any, isSelected?: boolean }) => {
-    const flag = getFlagUrl(team?.iso_code);
+    const flag = getFlagUrl(team);
     return (
       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
         {flag ? (
-          <img 
-            src={flag} 
-            alt={team.name} 
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              (e.target as HTMLImageElement).parentElement!.classList.add('bg-zinc-200', 'dark:bg-zinc-700');
-            }}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center w-full h-full bg-zinc-100 dark:bg-zinc-800">
-            <span className="text-2xl mb-1">⚽</span>
-            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-tighter">{team?.iso_code}</span>
-          </div>
-        )}
+          <img src={flag} alt={team.name} className="w-full h-full object-cover" onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+            // Fallback manual si la imagen falla
+            const parent = (e.target as HTMLImageElement).parentElement;
+            if (parent) parent.classList.add('bg-gray-200');
+          }} />
+        ) : <BallIcon />}
       </div>
     );
   };
 
   return (
-    <div className={`bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-sm border transition-all overflow-hidden ${
+    <div className={`bg-white dark:bg-zinc-900 rounded-[3rem] shadow-sm border transition-all overflow-hidden ${
       isFinished ? 'border-blue-500 ring-4 ring-blue-500/10' : 
       isLive ? 'border-red-500 ring-4 ring-red-500/10' :
       saved ? 'border-green-500 ring-4 ring-green-500/10' : 'border-gray-100 dark:border-zinc-800'
     }`}>
-      {/* Header Badges */}
       {isFinished ? (
         <div className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2.5 text-center shadow-inner">Partido Finalizado</div>
       ) : isLive ? (
@@ -135,14 +148,13 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
         <div className="flex flex-col items-center">
           <div className="flex justify-between w-full mb-8 px-1">
             <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isLive ? 'bg-red-50 text-red-600 dark:bg-red-950/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
-              {match.stage.replace("_", " ")} {match.group_id ? `• Grupo ${match.group_id}` : ""}
+              {getStageName(match.stage, match.group_id)}
             </span>
             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
               {startTime.toLocaleDateString([], { day: '2-digit', month: 'short' })} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
 
-          {/* MAIN SCORE UNIT (Only for Live or Finished) */}
           {(isLive || isFinished) && (
             <div className={`mb-6 flex flex-col items-center p-4 rounded-3xl w-full transition-all border-2 ${isLive ? 'bg-red-50/50 border-red-100 dark:bg-red-950/10 dark:border-red-900/20 shadow-lg' : 'bg-gray-50 border-gray-100 dark:bg-zinc-800/50 dark:border-zinc-700'}`}>
               <span className={`text-[9px] font-black uppercase tracking-[0.3em] mb-2 ${isLive ? 'text-red-500' : 'text-gray-400'}`}>
@@ -196,7 +208,7 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
           
           <div className="w-full flex gap-3">
             {!userId ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-dashed">Login para jugar</div>
+              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-dashed">Entrar para jugar</div>
             ) : isFinished ? (
               <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/30">Cerrado</div>
             ) : isLocked ? (
