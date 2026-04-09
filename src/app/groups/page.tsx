@@ -83,7 +83,7 @@ export default async function GroupsPage({
             <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Ligas Privadas</h2>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">
-            MIS <span className="text-blue-600 dark:text-blue-500">GRUPOS</span>
+            MIS <span className="text-blue-600 dark:text-blue-500">LIGAS</span>
           </h1>
         </header>
 

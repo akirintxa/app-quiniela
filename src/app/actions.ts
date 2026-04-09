@@ -32,6 +32,8 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
     throw new Error('Cerrado');
   }
 
+  const predictedWinnerId = winnerId || (scoreA > scoreB ? match.team_a_id : (scoreB > scoreA ? match.team_b_id : null));
+
   const { data, error } = await supabase
     .from('predictions')
     .upsert({
@@ -39,7 +41,7 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
       match_id: matchId,
       predicted_a: scoreA,
       predicted_b: scoreB,
-      predicted_winner_id: winnerId || (scoreA > scoreB ? match.team_a_id : match.team_b_id)
+      predicted_winner_id: predictedWinnerId
     }, { onConflict: 'user_id,match_id' })
     .select();
 
@@ -218,12 +220,14 @@ async function updatePredictionsPoints(supabase: any, matchId: number, matchData
 
 export async function updateLiveScore(matchId: number, resultA: number, resultB: number) {
   const supabase = await checkAdmin();
-  const { data: match } = await supabase
+  const { data: match, error } = await supabase
     .from('matches')
     .update({ result_a: resultA, result_b: resultB, is_locked: true })
     .eq('id', matchId)
     .select()
     .single();
+
+  if (error) throw error;
 
   if (match) {
     await updatePredictionsPoints(supabase, matchId, match);
@@ -236,12 +240,14 @@ export async function updateLiveScore(matchId: number, resultA: number, resultB:
 
 export async function finalizeMatch(matchId: number, resultA: number, resultB: number) {
   const supabase = await checkAdmin();
-  const { data: match } = await supabase
+  const { data: match, error } = await supabase
     .from('matches')
     .update({ result_a: resultA, result_b: resultB, is_locked: true, is_finished: true })
     .eq('id', matchId)
     .select()
     .single();
+
+  if (error) throw error;
 
   if (match) {
     await updatePredictionsPoints(supabase, matchId, match);
@@ -255,13 +261,33 @@ export async function finalizeMatch(matchId: number, resultA: number, resultB: n
 
 export async function resetMatch(matchId: number) {
   const supabase = await checkAdmin();
-  await supabase.from('matches').update({ result_a: null, result_b: null, is_locked: false, is_finished: false }).eq('id', matchId);
-  await supabase.from('predictions').update({ points_won: null }).eq('match_id', matchId);
-  revalidatePath('/'); revalidatePath('/ranking'); revalidatePath('/admin'); revalidatePath('/groups');
+  // 1. Resetear el partido a su estado inicial
+  const { error: matchError } = await supabase.from('matches').update({ 
+    result_a: null, 
+    result_b: null, 
+    winner_id: null,
+    is_locked: false, 
+    is_finished: false 
+  }).eq('id', matchId);
+
+  if (matchError) throw matchError;
+
+  // 2. Limpiar los puntos de todas las predicciones de este partido
+  const { error: predError } = await supabase.from('predictions').update({ points_won: null }).eq('match_id', matchId);
+  
+  if (predError) throw predError;
+
+  // 3. Revalidar todas las rutas posibles para que el cambio sea instantáneo
+  revalidatePath('/'); 
+  revalidatePath('/ranking'); 
+  revalidatePath('/admin'); 
+  revalidatePath('/groups');
+  revalidatePath('/groups/[id]', 'page');
 }
 
 export async function toggleMatchLock(matchId: number, isLocked: boolean) {
   const supabase = await checkAdmin();
-  await supabase.from('matches').update({ is_locked: isLocked }).eq('id', matchId);
+  const { error } = await supabase.from('matches').update({ is_locked: isLocked }).eq('id', matchId);
+  if (error) throw error;
   revalidatePath('/'); revalidatePath('/admin');
 }

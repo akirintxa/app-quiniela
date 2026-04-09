@@ -1,14 +1,18 @@
 import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
+import NavbarLinks from "./NavbarLinks";
+import MobileNavbarLinks from "./MobileNavbarLinks";
 
 export default async function Navbar() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let displayName = user?.email?.split('@')[0];
+  let avatarUrl = null;
   if (user?.id) {
-    const { data: profile } = await supabase.from('profiles').select('nickname').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('nickname, avatar_url').eq('id', user.id).single();
     if (profile?.nickname) displayName = profile.nickname;
+    if (profile?.avatar_url) avatarUrl = profile.avatar_url;
   }
 
   return (
@@ -24,20 +28,18 @@ export default async function Navbar() {
 
         {/* Links - Solo visibles si está logueado */}
         <div className="flex items-center gap-4 sm:gap-8">
-          {user && (
-            <div className="hidden sm:flex items-center gap-6 mr-4">
-              <Link href="/" className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors">Mis Predicciones</Link>
-              <Link href="/groups" className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors">Mis Grupos</Link>
-              <Link href="/ranking" className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors">Ranking</Link>
-            </div>
-          )}
+          {user && <NavbarLinks />}
           
           {user ? (
             <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/profile" className="flex items-center gap-3 bg-gray-50 dark:bg-zinc-900 p-1 rounded-full border border-gray-100 dark:border-zinc-800 shadow-sm pl-4 pr-2 hover:border-blue-500 transition-all group">
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter group-hover:text-blue-600">{displayName}</span>
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shadow-inner uppercase">
-                  {displayName?.substring(0, 1)}
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shadow-inner uppercase overflow-hidden">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={displayName || 'avatar'} className="w-full h-full object-cover" />
+                  ) : (
+                    displayName?.substring(0, 1)
+                  )}
                 </div>
               </Link>
               <form action="/auth/signout" method="post">
@@ -55,13 +57,7 @@ export default async function Navbar() {
       </div>
       
       {/* Mobile Links (Only visible on small screens and if logged in) */}
-      {user && (
-        <div className="sm:hidden flex justify-center gap-8 pb-4 border-t border-gray-50 dark:border-zinc-900 pt-2">
-          <Link href="/" className="text-[9px] font-black uppercase tracking-widest text-gray-400">Inicio</Link>
-          <Link href="/groups" className="text-[9px] font-black uppercase tracking-widest text-gray-400">Grupos</Link>
-          <Link href="/ranking" className="text-[9px] font-black uppercase tracking-widest text-gray-400">Ranking</Link>
-        </div>
-      )}
+      {user && <MobileNavbarLinks />}
     </nav>
   );
 }

@@ -40,57 +40,73 @@ export default async function RankingPage({
   let userMap: Record<string, any> = {};
   
   if (currentView === "players") {
-    let targetUserIds: string[] = [];
-    if (selectedPoolId && selectedPoolId !== 'all') {
-      const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', Number(selectedPoolId));
-      if (members) targetUserIds = members.map(m => m.user_id);
-    } else {
-      const { data: allProfiles } = await supabase.from('profiles').select('id');
-      const profileIds = allProfiles?.map(p => p.id) || [];
-      const { data: allPredictors } = await supabase.from('predictions').select('user_id');
-      const predictorIds = allPredictors?.map(p => p.user_id) || [];
-      targetUserIds = Array.from(new Set([...profileIds, ...predictorIds]));
-    }
+    // 1. Obtener todos los perfiles registrados (Fuente de Verdad)
+    // Usamos una consulta simple para evitar errores de joins
+    const { data: profiles, error: pError } = await supabase
+      .from('profiles')
+      .select('id, nickname, avatar_url, favorite_team_id');
+    
+    if (pError) console.error("Error fetching profiles:", pError);
 
-    const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
-    const lastMatchId = finishedMatches?.[0]?.id;
+    if (profiles) {
+      let filteredProfiles = profiles;
 
-    const { data: profilesData } = targetUserIds.length > 0 
-      ? await supabase.from('profiles').select('id, nickname, avatar_url, teams:favorite_team_id (iso_code)').in('id', targetUserIds)
-      : { data: [] };
-
-    const { data: predictionsData } = targetUserIds.length > 0
-      ? await supabase.from('predictions').select('user_id, points_won, match_id').in('user_id', targetUserIds)
-      : { data: [] };
-
-    const currentScores: Record<string, number> = {};
-    const previousScores: Record<string, number> = {};
-    targetUserIds.forEach(id => { currentScores[id] = 0; previousScores[id] = 0; });
-
-    predictionsData?.forEach(p => {
-      if (currentScores[p.user_id] !== undefined) {
-        currentScores[p.user_id] += p.points_won || 0;
-        if (p.match_id !== lastMatchId && finishedMatches?.some(m => m.id === p.match_id)) {
-          previousScores[p.user_id] += p.points_won || 0;
+      // 2. Si estamos en una liga, filtramos los perfiles
+      if (selectedPoolId && selectedPoolId !== 'all') {
+        const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', Number(selectedPoolId));
+        if (members) {
+          const memberIds = members.map(m => m.user_id);
+          filteredProfiles = profiles.filter(p => memberIds.includes(p.id));
         }
       }
-    });
 
-    const currentRanked = Object.keys(currentScores).map(id => ({ id, points: currentScores[id] })).sort((a, b) => b.points - a.points);
-    const previousRanked = Object.keys(previousScores).map(id => ({ id, points: previousScores[id] })).sort((a, b) => b.points - a.points);
+      const targetIds = filteredProfiles.map(p => p.id);
 
-    profilesData?.forEach(p => {
-      const curPos = currentRanked.findIndex(r => r.id === p.id);
-      const prePos = previousRanked.findIndex(r => r.id === p.id);
-      let trend = 'same';
-      if (lastMatchId) {
-        if (curPos < prePos) trend = 'up';
-        else if (curPos > prePos) trend = 'down';
-      }
-      userMap[p.id] = { id: p.id, nickname: p.nickname || 'Usuario', avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, flag: (p.teams as any)?.iso_code, points: currentScores[p.id], trend, isMe: p.id === user.id };
-    });
+      // 3. Obtener puntos acumulados de forma segura
+      const { data: predictionsData } = await supabase
+        .from('predictions')
+        .select('user_id, points_won, match_id')
+        .in('user_id', targetIds);
 
-    sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
+      const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
+      const lastMatchId = finishedMatches?.[0]?.id;
+
+      const currentScores: Record<string, number> = {};
+      const previousScores: Record<string, number> = {};
+      targetIds.forEach(id => { currentScores[id] = 0; previousScores[id] = 0; });
+
+      predictionsData?.forEach(p => {
+        if (currentScores[p.user_id] !== undefined) {
+          currentScores[p.user_id] += p.points_won || 0;
+          if (p.match_id !== lastMatchId && finishedMatches?.some(m => m.id === p.match_id)) {
+            previousScores[p.user_id] += p.points_won || 0;
+          }
+        }
+      });
+
+      const currentRanked = Object.keys(currentScores).map(id => ({ id, points: currentScores[id] })).sort((a, b) => b.points - a.points);
+      const previousRanked = Object.keys(previousScores).map(id => ({ id, points: previousScores[id] })).sort((a, b) => b.points - a.points);
+
+      filteredProfiles.forEach(p => {
+        const curPos = currentRanked.findIndex(r => r.id === p.id);
+        const prePos = previousRanked.findIndex(r => r.id === p.id);
+        let trend = 'same';
+        if (lastMatchId) {
+          if (curPos < prePos) trend = 'up';
+          else if (curPos > prePos) trend = 'down';
+        }
+        userMap[p.id] = { 
+          id: p.id, 
+          nickname: p.nickname || 'Usuario', 
+          avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, 
+          points: currentScores[p.id] || 0, 
+          trend, 
+          isMe: p.id === user.id 
+        };
+      });
+
+      sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
+    }
   }
 
   // --- LOGIC FOR LEAGUES RANKING ---
@@ -138,7 +154,9 @@ export default async function RankingPage({
     if (!iso) return null;
     const cleanIso = iso.toLowerCase();
     const special: Record<string, string> = { 'gb-sct': 'gb-sct', 'gb-eng': 'gb-eng', 'gb-wls': 'gb-wls' };
-    return `https://flagcdn.com/w40/${special[cleanIso] || cleanIso}.png`;
+    if (special[cleanIso]) return `https://flagcdn.com/w40/${special[cleanIso]}.png`;
+    if (cleanIso.length !== 2) return null;
+    return `https://flagcdn.com/w40/${cleanIso}.png`;
   };
 
   return (
@@ -240,6 +258,13 @@ export default async function RankingPage({
                       </td>
                     </tr>
                   ))}
+                  {sortedRanking.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-8 py-20 text-center text-gray-400 text-xs font-black uppercase tracking-widest opacity-50 italic">
+                        No hay jugadores registrados en esta vista aún
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

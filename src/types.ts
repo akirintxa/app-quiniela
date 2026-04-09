@@ -16,6 +16,8 @@ export interface Match {
   result_a: number | null;
   result_b: number | null;
   winner_id: number | null;
+  is_locked: boolean;
+  is_finished: boolean;
 }
 
 export interface Prediction {

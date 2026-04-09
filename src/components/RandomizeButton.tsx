@@ -20,20 +20,20 @@ export default function RandomizeButton({ groupId }: { groupId: string }) {
   };
 
   return (
-    <button 
+    <button
       onClick={handleClick}
       disabled={loading}
-      className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 transition-all active:scale-95 shadow-sm ${
-        loading 
-          ? 'bg-gray-100 text-gray-400 border-gray-100' 
-          : 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-100 dark:border-orange-900/30 text-orange-600 dark:text-orange-400 hover:border-orange-300 hover:shadow-orange-500/10'
+      className={`flex items-center gap-2 px-6 py-3 rounded-2xl border-2 transition-all active:scale-95 shadow-xl ${
+        loading
+          ? 'bg-gray-100 text-gray-400 border-gray-100'
+          : 'bg-gradient-to-r from-orange-500 to-amber-500 border-orange-400 text-white hover:from-orange-600 hover:to-amber-600 hover:shadow-orange-500/20'
       }`}
       title="Rellenar grupo aleatoriamente"
     >
-      <span className="text-[10px] font-black uppercase tracking-widest">
+      <span className="text-[11px] font-black uppercase tracking-widest">
         {loading ? 'Sorteando...' : '¡Una Ayudaíta!'}
       </span>
-      <span className={`text-sm ${loading ? 'animate-spin' : 'animate-bounce'}`}>🎲</span>
+      <span className={`text-lg ${loading ? 'animate-spin' : 'animate-bounce'}`}>🎲</span>
     </button>
   );
 }

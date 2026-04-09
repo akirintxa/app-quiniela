@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Match } from "@/types";
 import { updateLiveScore, finalizeMatch, toggleMatchLock, resetMatch } from "@/app/actions";
 
 interface AdminMatchRowProps {
-  match: Match & { is_locked?: boolean, is_finished?: boolean };
+  match: Match;
 }
 
 export default function AdminMatchRow({ match }: AdminMatchRowProps) {
@@ -13,6 +13,15 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
   const [resultB, setResultB] = useState<number | string>(match.result_b ?? "");
   const [loading, setLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(match.is_locked || false);
+  const [isFinished, setIsFinished] = useState(match.is_finished || false);
+
+  // Sincronizar estado local cuando las props cambian (después de revalidatePath)
+  useEffect(() => {
+    setResultA(match.result_a ?? "");
+    setResultB(match.result_b ?? "");
+    setIsLocked(match.is_locked || false);
+    setIsFinished(match.is_finished || false);
+  }, [match.result_a, match.result_b, match.is_locked, match.is_finished]);
 
   const handleLiveUpdate = async () => {
     if (resultA === "" || resultB === "") return;
@@ -34,6 +43,8 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
     setLoading(true);
     try {
       await finalizeMatch(match.id, Number(resultA), Number(resultB));
+      setIsFinished(true);
+      setIsLocked(true);
     } catch (error) {
       alert("Error al finalizar");
     } finally {
@@ -50,6 +61,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
       setResultA("");
       setResultB("");
       setIsLocked(false);
+      setIsFinished(false);
     } catch (error) {
       alert("Error al reiniciar");
     } finally {
@@ -70,11 +82,11 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
   };
 
   return (
-    <div className={`p-6 flex flex-col lg:flex-row items-center justify-between gap-6 transition-all ${match.is_finished ? 'bg-blue-50/20 dark:bg-blue-900/5' : ''}`}>
+    <div className={`p-6 flex flex-col lg:flex-row items-center justify-between gap-6 transition-all ${isFinished ? 'bg-blue-50/20 dark:bg-blue-900/5' : ''}`}>
       <div className="flex-1 flex items-center gap-6">
         <button 
           onClick={handleToggleLock}
-          disabled={loading || match.is_finished}
+          disabled={loading || isFinished}
           className={`w-12 h-12 rounded-2xl flex items-center justify-center border-2 transition-all ${isLocked ? 'bg-red-50 border-red-100 text-red-500' : 'bg-green-50 border-green-100 text-green-500'}`}
         >
           {isLocked ? (
@@ -91,7 +103,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
               type="number" 
               value={resultA}
               onChange={(e) => setResultA(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={match.is_finished}
+              disabled={isFinished}
               className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
             />
             <span className="font-black text-gray-300">:</span>
@@ -99,7 +111,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
               type="number" 
               value={resultB}
               onChange={(e) => setResultB(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={match.is_finished}
+              disabled={isFinished}
               className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
             />
           </div>
@@ -108,7 +120,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
       </div>
 
       <div className="flex gap-2">
-        {match.is_finished ? (
+        {isFinished ? (
           <>
             <span className="px-6 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl font-black text-[10px] uppercase tracking-widest border border-blue-200 dark:border-blue-800">
               Finalizado

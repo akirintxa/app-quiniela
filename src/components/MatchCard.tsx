@@ -65,10 +65,15 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     const name = (team.name || "").toLowerCase();
     const code = team.iso_code.toLowerCase();
     
+    // Si es un código especial del Reino Unido
+    const special: Record<string, string> = { 'gb-sct': 'gb-sct', 'gb-eng': 'gb-eng', 'gb-wls': 'gb-wls' };
+    if (special[code]) return `https://flagcdn.com/w160/${special[code]}.png`;
+    
+    // Casos especiales por nombre (fallback)
     if (name.includes("scot") || name.includes("escoc")) return "https://flagcdn.com/w160/gb-sct.png";
     if (name.includes("engl") || name.includes("ingla")) return "https://flagcdn.com/w160/gb-eng.png";
-    if (name.includes("wale") || name.includes("gale")) return "https://flagcdn.com/w160/gb-wls.png";
     
+    // Si no es un código de 2 letras y no es especial, no hay bandera
     if (code.length !== 2) return null;
     return `https://flagcdn.com/w160/${code}.png`;
   };
@@ -93,16 +98,56 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   };
 
   const fetchGroupPredictions = async () => {
-    if (!poolId || showSpy) { setShowSpy(!showSpy); return; }
+    if (!poolId) return;
+    if (showSpy) { setShowSpy(false); return; }
+    
     setLoadingSpy(true);
     setShowSpy(true);
-    const supabase = createClient();
-    const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', poolId);
-    if (members && members.length > 0) {
-      const { data: preds } = await supabase.from('predictions').select(`predicted_a, predicted_b, points_won, user_id, profiles:user_id (nickname)`).eq('match_id', match.id).in('user_id', members.map(m => m.user_id));
-      setGroupPredictions(preds || []);
+    
+    try {
+      const supabase = createClient();
+      // 1. Obtener los IDs de los miembros de esta liga
+      const { data: members, error: mError } = await supabase
+        .from('pool_members')
+        .select('user_id')
+        .eq('pool_id', poolId);
+      
+      if (mError) throw mError;
+
+      if (members && members.length > 0) {
+        const memberIds = members.map(m => m.user_id);
+        
+        // 2. Obtener las predicciones de esos miembros para este partido
+        const { data: preds, error: pError } = await supabase
+          .from('predictions')
+          .select(`
+            predicted_a, 
+            predicted_b, 
+            points_won, 
+            user_id, 
+            profiles (nickname)
+          `)
+          .eq('match_id', match.id)
+          .in('user_id', memberIds);
+
+        if (pError) throw pError;
+        
+        // Ordenar: primero los que tienen más puntos, luego por nickname
+        const sortedPreds = (preds || []).map((p: any) => ({
+          ...p,
+          nickname: p.profiles?.nickname || 'Usuario'
+        })).sort((a: any, b: any) => {
+          if ((b.points_won || 0) !== (a.points_won || 0)) return (b.points_won || 0) - (a.points_won || 0);
+          return a.nickname.localeCompare(b.nickname);
+        });
+
+        setGroupPredictions(sortedPreds);
+      }
+    } catch (error) {
+      console.error("Error fetching group predictions:", error);
+    } finally {
+      setLoadingSpy(false);
     }
-    setLoadingSpy(false);
   };
 
   const BallIcon = ({ size = 28 }: { size?: number }) => (

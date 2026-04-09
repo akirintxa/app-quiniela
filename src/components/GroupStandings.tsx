@@ -1,19 +1,27 @@
 'use client';
 
+import { useState } from "react";
 import { TeamStats } from "@/lib/standings";
 
-export default function GroupStandings({ stats }: { stats: TeamStats[] }) {
+export default function GroupStandings({ stats, predictedStats }: { stats: TeamStats[], predictedStats?: TeamStats[] }) {
+  const [showPredicted, setShowPredicted] = useState(true);
+  
+  const currentStats = showPredicted && predictedStats ? predictedStats : stats;
+
   const getFlagUrl = (team: any) => {
     if (!team?.iso_code) return null;
     const name = (team.name || "").toLowerCase();
     const code = team.iso_code.toLowerCase();
     
-    // Casos especiales para el Reino Unido
+    // Si es un código especial del Reino Unido
+    const special: Record<string, string> = { 'gb-sct': 'gb-sct', 'gb-eng': 'gb-eng', 'gb-wls': 'gb-wls' };
+    if (special[code]) return `https://flagcdn.com/w80/${special[code]}.png`;
+    
+    // Casos especiales por nombre (fallback)
     if (name.includes("scot") || name.includes("escoc")) return "https://flagcdn.com/w80/gb-sct.png";
     if (name.includes("engl") || name.includes("ingla")) return "https://flagcdn.com/w80/gb-eng.png";
-    if (name.includes("wale") || name.includes("gale")) return "https://flagcdn.com/w80/gb-wls.png";
     
-    // Si no es un código de 2 letras (placeholder), no hay bandera
+    // Si no es un código de 2 letras y no es especial, no hay bandera
     if (code.length !== 2) return null;
     return `https://flagcdn.com/w80/${code}.png`;
   };
@@ -28,6 +36,23 @@ export default function GroupStandings({ stats }: { stats: TeamStats[] }) {
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden mb-10">
+      {/* Selector de Tabla */}
+      <div className="flex border-b border-gray-50 dark:border-zinc-800 p-1">
+        <button 
+          onClick={() => setShowPredicted(false)}
+          className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest transition-all rounded-t-[1.5rem] ${!showPredicted ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          Resultados Reales
+        </button>
+        <button 
+          onClick={() => setShowPredicted(true)}
+          className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest transition-all rounded-t-[1.5rem] flex items-center justify-center gap-2 ${showPredicted ? 'bg-orange-50 dark:bg-orange-950/20 text-orange-600' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+          <span>Mis Pronósticos</span>
+          <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+        </button>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[500px]">
           <thead>
@@ -43,11 +68,17 @@ export default function GroupStandings({ stats }: { stats: TeamStats[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
-            {stats.map((s, index) => {
+            {currentStats.map((s, index) => {
               const flag = getFlagUrl(s.team);
+              const isQualifying = index < 2; // Top 2 classify
               return (
-                <tr key={s.team.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                  <td className="px-6 py-4 text-[10px] font-black text-gray-400">{index + 1}</td>
+                <tr key={s.team.id} className={`hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors ${isQualifying ? 'bg-blue-50/10 dark:bg-blue-900/5' : ''}`}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      {isQualifying && <div className="w-1 h-4 bg-blue-500 rounded-full"></div>}
+                      <span className={`text-[10px] font-black ${isQualifying ? 'text-blue-600' : 'text-gray-400'}`}>{index + 1}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-6 bg-gray-100 dark:bg-zinc-800 rounded-sm overflow-hidden flex-shrink-0 border border-gray-100 dark:border-zinc-700">
@@ -58,7 +89,7 @@ export default function GroupStandings({ stats }: { stats: TeamStats[] }) {
                           }} />
                         ) : <BallIcon />}
                       </div>
-                      <span className="text-xs font-black uppercase tracking-tighter text-gray-900 dark:text-white truncate">{s.team.name}</span>
+                      <span className={`text-xs font-black uppercase tracking-tighter truncate ${isQualifying ? 'text-gray-900 dark:text-white' : 'text-gray-500'}`}>{s.team.name}</span>
                     </div>
                   </td>
                   <td className="px-4 py-4 text-center text-xs font-bold text-gray-500">{s.played}</td>
@@ -66,7 +97,7 @@ export default function GroupStandings({ stats }: { stats: TeamStats[] }) {
                   <td className="px-4 py-4 text-center text-xs font-bold text-gray-500">{s.drawn}</td>
                   <td className="px-4 py-4 text-center text-xs font-bold text-gray-500">{s.lost}</td>
                   <td className="px-4 py-4 text-center text-xs font-black text-gray-400">{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
-                  <td className="px-6 py-4 text-right font-black text-blue-600 dark:text-blue-400 text-sm">{s.points}</td>
+                  <td className={`px-6 py-4 text-right font-black text-sm ${showPredicted ? 'text-orange-600' : 'text-blue-600 dark:text-blue-400'}`}>{s.points}</td>
                 </tr>
               );
             })}

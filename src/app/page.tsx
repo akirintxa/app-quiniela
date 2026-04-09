@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import MatchCard from "@/components/MatchCard";
 import GroupStandings from "@/components/GroupStandings";
+import RandomizeButton from "@/components/RandomizeButton";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { calculateStandings } from "@/lib/standings";
@@ -61,7 +62,7 @@ export default async function Home({
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               </div>
               <h3 className="text-xl font-black uppercase tracking-tighter mb-4">Ligas Privadas</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">Crea grupos exclusivos para tu oficina, familia o amigos con códigos de invitación únicos.</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">Crea ligas exclusivas para tu oficina, familia o amigos con códigos de invitación únicos.</p>
             </div>
 
             <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] shadow-xl border border-gray-100 dark:border-zinc-800 transform transition-all hover:-translate-y-2">
@@ -140,6 +141,8 @@ export default async function Home({
 
   let groupTeams: Team[] = [];
   let standings: any[] = [];
+  let predictedStandings: any[] = [];
+
   if (view === "groups" && matches) {
     const teamMap = new Map();
     matches.forEach(m => {
@@ -147,7 +150,20 @@ export default async function Home({
       if (m.team_b) teamMap.set(m.team_b.id, m.team_b);
     });
     groupTeams = Array.from(teamMap.values());
+    
+    // Tabla Real
     standings = calculateStandings(matches as Match[], groupTeams);
+
+    // Tabla de Pronósticos (Simulada)
+    const simulatedMatches = matches.map(m => {
+      const pred = predictions.find(p => p.match_id === m.id);
+      return {
+        ...m,
+        result_a: pred?.predicted_a ?? null,
+        result_b: pred?.predicted_b ?? null
+      };
+    });
+    predictedStandings = calculateStandings(simulatedMatches as Match[], groupTeams);
   }
 
   const groupedMatches: Record<string, Match[]> = {};
@@ -166,12 +182,14 @@ export default async function Home({
       <Suspense fallback={null}><HomeTabsHandler /></Suspense>
       <div className="max-w-5xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6 text-center sm:text-left">
-          <div>
-            <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
-              <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">MUNDIAL 2026</span>
-              <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Predicciones & Resultados</h2>
+          <div className="flex flex-col md:flex-row md:items-center gap-6">
+            <div>
+              <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
+                <span className="bg-blue-600 text-white px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest">MUNDIAL 2026</span>
+                <h2 className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">Predicciones & Resultados</h2>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">MIS <span className="text-blue-600">PREDICCIONES</span></h1>
             </div>
-            <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">MIS <span className="text-blue-600">PREDICCIONES</span></h1>
           </div>
 
           <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
@@ -187,55 +205,77 @@ export default async function Home({
           </div>
         </header>
 
-        <div className="flex flex-col gap-6 mb-10">
-          <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit self-center sm:self-start overflow-x-auto shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-10">
+          <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit overflow-x-auto shadow-sm">
             <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
             <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
             <Link href="/?view=results" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
           </div>
-
-          {view === 'groups' && (
-            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2">
-              <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
-                {groups.map(g => (
-                  <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-full aspect-square sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
-                    {g}
-                    {groupCompletion[g] === false && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 border-2 border-white dark:border-black rounded-full shadow-sm"></span>}
-                    {groupCompletion[g] === true && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full shadow-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
+        {view === 'groups' && (
+          <div className="flex flex-col sm:flex-row items-center gap-4 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2 mb-10">
+            <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+              {groups.map(g => (
+                <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-full aspect-square sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
+                  {g}
+                  {groupCompletion[g] === false && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 border-2 border-white dark:border-black rounded-full shadow-sm"></span>}
+                  {groupCompletion[g] === true && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full shadow-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         <section className="space-y-10">
-          {view === "groups" && standings.length > 0 && (
+          {view === "groups" && (
             <div className="animate-in fade-in zoom-in duration-500">
-              <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mb-4 px-2 italic">Clasificación Grupo {selectedGroup}</h2>
-              <GroupStandings stats={standings} />
+              <div className="flex justify-between items-center mb-6 bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800">
+                <div>
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 italic">Clasificación Grupo {selectedGroup}</h2>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Basado en tus predicciones actuales</p>
+                </div>
+                <RandomizeButton groupId={selectedGroup} />
+              </div>
+              {standings.length > 0 ? (
+                <GroupStandings stats={standings} predictedStats={predictedStandings} />
+              ) : (
+                <div className="bg-gray-50 dark:bg-zinc-900/50 p-8 rounded-[2rem] text-center border border-dashed border-gray-200 dark:border-zinc-800">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">No hay partidos configurados para el Grupo {selectedGroup}</p>
+                </div>
+              )}
             </div>
           )}
 
           {(view === "today" || view === "results") ? (
-            Object.entries(groupedMatches).map(([date, dayMatches]) => (
-              <div key={date} className="space-y-6">
-                <div className="flex items-center gap-4 text-gray-400">
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.4em] whitespace-nowrap">{date}</h2>
-                  <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900"></div>
+            Object.entries(groupedMatches).length > 0 ? (
+              Object.entries(groupedMatches).map(([date, dayMatches]) => (
+                <div key={date} className="space-y-6">
+                  <div className="flex items-center gap-4 text-gray-400">
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.4em] whitespace-nowrap">{date}</h2>
+                    <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900"></div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {dayMatches.map((match) => (
+                      <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {dayMatches.map((match) => (
-                    <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
-                  ))}
-                </div>
+              ))
+            ) : (
+              <div className="py-20 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-300">No hay partidos para mostrar</p>
               </div>
-            ))
+            )
           ) : matches && matches.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {matches.map((match) => (
                 <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
               ))}
+            </div>
+          ) : view === "knockout" ? (
+            <div className="py-20 text-center">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-300">Selecciona una fase de eliminatorias</p>
             </div>
           ) : null}
         </section>
