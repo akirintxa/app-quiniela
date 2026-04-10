@@ -17,11 +17,16 @@ export function calculatePoints(prediction: Prediction, match: Match): number {
     return 0;
   }
 
+  const pA = Number(prediction.predicted_a);
+  const pB = Number(prediction.predicted_b);
+  const rA = Number(match.result_a);
+  const rB = Number(match.result_b);
+
   let points = 0;
 
   // 1. ACIERTO DE TENDENCIA (Ganador o Empate) -> +2 Puntos
-  const predictedDiff = prediction.predicted_a - prediction.predicted_b;
-  const actualDiff = match.result_a - match.result_b;
+  const predictedDiff = pA - pB;
+  const actualDiff = rA - rB;
 
   const correctOutcome = 
     (predictedDiff > 0 && actualDiff > 0) || // Gana A
@@ -31,13 +36,11 @@ export function calculatePoints(prediction: Prediction, match: Match): number {
   if (correctOutcome) points += 2;
 
   // 2. ACIERTO DE DIFERENCIA DE GOLES -> +1 Punto
-  // Se premia la lectura del margen del partido (ej: 1-0 vs 2-1)
-  // Usamos Math.abs para premiar la diferencia incluso si falló el ganador
   if (Math.abs(predictedDiff) === Math.abs(actualDiff)) points += 1;
 
   // 3. ACIERTO DE GOLES INDIVIDUALES -> +1 Punto por cada equipo (+2 total)
-  if (prediction.predicted_a === match.result_a) points += 1;
-  if (prediction.predicted_b === match.result_b) points += 1;
+  if (pA === rA) points += 1;
+  if (pB === rB) points += 1;
 
   return points;
 }

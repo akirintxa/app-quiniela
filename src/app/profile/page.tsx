@@ -60,6 +60,8 @@ export default function ProfilePage() {
   const [updating, setUpdating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  const tournamentStarted = new Date() >= new Date("2026-06-11T18:00:00Z");
+
   useEffect(() => {
     async function loadData() {
       const supabase = createClient();
@@ -227,8 +229,17 @@ export default function ProfilePage() {
                   <input name="nickname" type="text" defaultValue={profile?.nickname || ""} className="w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none font-black uppercase text-sm focus:ring-2 focus:ring-blue-600 transition-all" required />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1">Tu Candidato al Título</label>
-                  <select name="favorite_team_id" value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)} className="w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none font-black uppercase text-sm focus:ring-2 focus:ring-blue-600 transition-all appearance-none">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1 flex justify-between items-center">
+                    Tu Candidato al Título
+                    {tournamentStarted && <span className="text-[8px] text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">Bloqueado por inicio de torneo</span>}
+                  </label>
+                  <select 
+                    name="favorite_team_id" 
+                    value={selectedTeam} 
+                    onChange={(e) => setSelectedTeam(e.target.value)} 
+                    disabled={tournamentStarted}
+                    className={`w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none font-black uppercase text-sm focus:ring-2 focus:ring-blue-600 transition-all appearance-none ${tournamentStarted ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
                     <option value="">Selecciona tu país</option>
                     {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
                   </select>

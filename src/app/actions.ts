@@ -175,6 +175,15 @@ export async function updateProfile(formData: FormData) {
   
   if (!user) return { error: 'No autorizado' };
 
+  // 0. Bloquear cambio de equipo favorito si ya empezó el mundial
+  const tournamentStarted = new Date() >= new Date("2026-06-11T18:00:00Z");
+  if (tournamentStarted) {
+    const { data: existingProfile } = await supabase.from('profiles').select('favorite_team_id').eq('id', user.id).single();
+    if (existingProfile && existingProfile.favorite_team_id && existingProfile.favorite_team_id !== (favoriteTeamId ? Number(favoriteTeamId) : null)) {
+      return { error: 'El candidato al título no se puede cambiar una vez iniciado el torneo' };
+    }
+  }
+
   // 1. Update Auth Metadata
   const { error: authError } = await supabase.auth.updateUser({ 
     data: { 
@@ -206,7 +215,13 @@ export async function updateProfile(formData: FormData) {
 
 // ADMIN Actions
 async function updatePredictionsPoints(supabase: any, matchId: number, matchData: any) {
-  const { data: predictions } = await supabase.from('predictions').select('*').eq('match_id', matchId);
+  const { data: predictions, error: fetchError } = await supabase.from('predictions').select('*').eq('match_id', matchId);
+  
+  if (fetchError) {
+    console.error("Error fetching predictions for points update:", fetchError);
+    return;
+  }
+
   if (predictions && predictions.length > 0) {
     const updates = predictions.map((pred: any) => ({
       id: pred.id, 
@@ -214,7 +229,12 @@ async function updatePredictionsPoints(supabase: any, matchId: number, matchData
       match_id: pred.match_id,
       points_won: calculatePoints(pred, matchData as Match)
     }));
-    await supabase.from('predictions').upsert(updates);
+
+    const { error: upsertError } = await supabase.from('predictions').upsert(updates);
+    if (upsertError) {
+      console.error("Error upserting points_won:", upsertError);
+      throw new Error("No se pudieron repartir los puntos. Verifica los permisos RLS.");
+    }
   }
 }
 

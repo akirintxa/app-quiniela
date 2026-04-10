@@ -40,11 +40,10 @@ export default async function RankingPage({
   let userMap: Record<string, any> = {};
   
   if (currentView === "players") {
-    // 1. Obtener todos los perfiles registrados (Fuente de Verdad)
-    // Usamos una consulta simple para evitar errores de joins
+    // 1. Obtener todos los perfiles registrados con su equipo favorito (iso_code)
     const { data: profiles, error: pError } = await supabase
       .from('profiles')
-      .select('id, nickname, avatar_url, favorite_team_id');
+      .select('id, nickname, avatar_url, favorite_team_id, teams:favorite_team_id (iso_code)');
     
     if (pError) console.error("Error fetching profiles:", pError);
 
@@ -99,6 +98,7 @@ export default async function RankingPage({
           id: p.id, 
           nickname: p.nickname || 'Usuario', 
           avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, 
+          flag: (p.teams as any)?.iso_code,
           points: currentScores[p.id] || 0, 
           trend, 
           isMe: p.id === user.id 
