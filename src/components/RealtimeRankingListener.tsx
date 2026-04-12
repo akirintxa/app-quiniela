@@ -9,19 +9,28 @@ export default function RealtimeRankingListener() {
   const supabase = createClient();
 
   useEffect(() => {
-    // Escuchar cambios en la tabla de predicciones
-    // Específicamente cuando se actualizan los puntos ganados
+    // Escuchar cambios en predicciones (puntos) y partidos (marcador en vivo)
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('db-realtime-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Escuchar INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'predictions',
+        },
+        () => {
+          router.refresh();
+        }
+      )
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'predictions',
+          table: 'matches',
         },
         () => {
-          // Refrescar los datos del servidor (re-ejecuta el Server Component)
           router.refresh();
         }
       )

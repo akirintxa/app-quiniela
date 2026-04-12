@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import MatchCard from "@/components/MatchCard";
 import GroupStandings from "@/components/GroupStandings";
 import RandomizeButton from "@/components/RandomizeButton";
+import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { calculateStandings } from "@/lib/standings";
@@ -180,6 +181,7 @@ export default async function Home({
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
       <Suspense fallback={null}><HomeTabsHandler /></Suspense>
+      <RealtimeRankingListener />
       <div className="max-w-5xl mx-auto">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6 text-center sm:text-left">
           <div className="flex flex-col md:flex-row md:items-center gap-6">
