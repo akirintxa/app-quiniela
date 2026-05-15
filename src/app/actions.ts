@@ -89,6 +89,48 @@ export async function randomizeGroupPredictions(groupId: string) {
   revalidatePath('/groups');
 }
 
+// USER: Randomize Knockout Predictions
+export async function randomizeKnockoutPredictions(stage: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: matches } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('stage', stage)
+    .eq('is_finished', false)
+    .eq('is_locked', false);
+
+  if (!matches || matches.length === 0) return;
+
+  const predictions = matches.map(match => {
+    const scoreA = Math.floor(Math.random() * 4);
+    const scoreB = Math.floor(Math.random() * 4);
+    let winnerId = null;
+    
+    // In knockout, draws MUST have a winner
+    if (scoreA === scoreB) {
+      winnerId = Math.random() > 0.5 ? match.team_a_id : match.team_b_id;
+    } else {
+      winnerId = scoreA > scoreB ? match.team_a_id : match.team_b_id;
+    }
+
+    return {
+      user_id: user.id,
+      match_id: match.id,
+      predicted_a: scoreA,
+      predicted_b: scoreB,
+      predicted_winner_id: winnerId
+    };
+  });
+
+  const { error } = await supabase.from('predictions').upsert(predictions, { onConflict: 'user_id,match_id' });
+  if (error) throw error;
+
+  revalidatePath('/');
+}
+
 // USER: Create Pool
 export async function createPool(formData: FormData) {
   const name = formData.get('name') as string;
@@ -238,11 +280,11 @@ async function updatePredictionsPoints(supabase: any, matchId: number, matchData
   }
 }
 
-export async function updateLiveScore(matchId: number, resultA: number, resultB: number) {
+export async function updateLiveScore(matchId: number, resultA: number, resultB: number, winnerId: number | null = null) {
   const supabase = await checkAdmin();
   const { data: match, error } = await supabase
     .from('matches')
-    .update({ result_a: resultA, result_b: resultB, is_locked: true })
+    .update({ result_a: resultA, result_b: resultB, winner_id: winnerId, is_locked: true })
     .eq('id', matchId)
     .select()
     .single();
@@ -258,11 +300,11 @@ export async function updateLiveScore(matchId: number, resultA: number, resultB:
   revalidatePath('/ranking');
 }
 
-export async function finalizeMatch(matchId: number, resultA: number, resultB: number) {
+export async function finalizeMatch(matchId: number, resultA: number, resultB: number, winnerId: number | null = null) {
   const supabase = await checkAdmin();
   const { data: match, error } = await supabase
     .from('matches')
-    .update({ result_a: resultA, result_b: resultB, is_locked: true, is_finished: true })
+    .update({ result_a: resultA, result_b: resultB, winner_id: winnerId, is_locked: true, is_finished: true })
     .eq('id', matchId)
     .select()
     .single();

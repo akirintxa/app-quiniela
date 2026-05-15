@@ -6,7 +6,9 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { calculateStandings } from "@/lib/standings";
+import { resolveKnockoutTeams } from "@/lib/knockout";
 import HomeTabsHandler from "@/components/HomeTabsHandler";
+import Bracket from "@/components/Bracket";
 import { Suspense } from "react";
 
 export default async function Home({
@@ -79,7 +81,7 @@ export default async function Home({
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m12 14 4-4 4 4-4 4-4-4Z"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
               </div>
               <h3 className="text-xl font-black uppercase tracking-tighter mb-4">Ayuda Inteligente</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">¿Sin tiempo? Usa "Una ayudaíta" para generar predicciones basadas en datos en un solo click.</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">¿Sin tiempo? Usa &quot;Una ayudaíta&quot; para generar predicciones basadas en datos en un solo click.</p>
             </div>
           </div>
         </section>
@@ -133,14 +135,53 @@ export default async function Home({
     });
   }
 
-  let query = supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`);
-  if (view === "today") query = query.eq("is_finished", false).order("start_time", { ascending: true }).limit(12);
-  else if (view === "results") query = query.eq("is_finished", true).order("start_time", { ascending: false }).limit(24);
-  else if (view === "groups") query = query.eq("group_id", selectedGroup).eq("stage", "group").order("start_time", { ascending: true });
-  else if (view === "knockout") query = query.eq("stage", selectedStage).order("start_time", { ascending: true });
-  const { data: matches } = await query;
+  // --- FETCH DATA FOR RESOLUTION ---
+  const { data: allTeams } = await supabase.from("teams").select("*");
+  const { data: allGroupMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").eq("stage", "group");
+  const { data: allKnockoutMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").neq("stage", "group");
 
-  let groupTeams: Team[] = [];
+  const isBracketView = selectedStage === 'bracket';
+  let matches: Match[] = [];
+
+  if (view === "today") {
+    const { data } = await supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`).eq("is_finished", false).order("start_time", { ascending: true }).limit(12);
+    matches = (data || []) as Match[];
+  } else if (view === "results") {
+    const { data } = await supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`).eq("is_finished", true).order("start_time", { ascending: false }).limit(24);
+    matches = (data || []) as Match[];
+  } else if (view === "groups") {
+    const { data } = await supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`).eq("group_id", selectedGroup).eq("stage", "group").order("start_time", { ascending: true });
+    matches = (data || []) as Match[];
+  } else if (view === "knockout") {
+    if (allKnockoutMatches && allGroupMatches && allTeams) {
+      const allResolved = resolveKnockoutTeams(allKnockoutMatches as Match[], allGroupMatches as Match[], predictions, allTeams as Team[]);
+      
+      if (isBracketView) {
+        matches = allResolved;
+      } else {
+        matches = allResolved.filter(m => m.stage === selectedStage).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+      }
+    }
+  }
+
+  // Resolve knockout teams for Today/Results views as well
+  if ((view === "today" || view === "results") && matches.length > 0) {
+    if (allKnockoutMatches && allGroupMatches && allTeams) {
+      matches = resolveKnockoutTeams(matches, allGroupMatches as Match[], predictions, allTeams as Team[]);
+    }
+  }
+
+  // Map placeholders back for labelling
+  matches = matches.map(rm => {
+    const original = (allKnockoutMatches as (Match & { team_a: Team, team_b: Team })[] || []).find(o => o.id === rm.id);
+    return {
+      ...rm,
+      placeholder_a: original?.team_a?.iso_code,
+      placeholder_b: original?.team_b?.iso_code
+    };
+  });
+
+  const groupTeams: Team[] = [];
   let standings: any[] = [];
   let predictedStandings: any[] = [];
 
@@ -210,6 +251,7 @@ export default async function Home({
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-10">
           <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit overflow-x-auto shadow-sm">
             <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
+            <Link href="/?view=knockout" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Eliminatorias</Link>
             <Link href="/?view=today" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
             <Link href="/?view=results" className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
           </div>
@@ -227,6 +269,34 @@ export default async function Home({
               ))}
             </div>
           </div>
+        )}
+
+        {view === 'knockout' && (
+          <>
+            <div className="flex flex-wrap gap-2 mb-6 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit overflow-x-auto shadow-sm">
+              {[
+                { id: 'round_32', label: 'Dieciseisavos' },
+                { id: 'round_16', label: 'Octavos' },
+                { id: 'quarter_final', label: 'Cuartos' },
+                { id: 'semi_final', label: 'Semis' },
+                { id: 'final', label: 'Final' },
+                { id: 'bracket', label: 'Árbol' }
+              ].map(s => (
+                <Link 
+                  key={s.id} 
+                  href={`/?view=knockout&stage=${s.id}`} 
+                  className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedStage === s.id ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md' : 'text-gray-400'}`}
+                >
+                  {s.label}
+                </Link>
+              ))}
+            </div>
+            {!isBracketView && (
+              <div className="flex justify-end mb-6 animate-in fade-in slide-in-from-right-4">
+                <RandomizeButton stage={selectedStage} />
+              </div>
+            )}
+          </>
         )}
 
         <section className="space-y-10">
@@ -249,7 +319,11 @@ export default async function Home({
             </div>
           )}
 
-          {(view === "today" || view === "results") ? (
+          {isBracketView ? (
+            <div className="animate-in fade-in zoom-in duration-500">
+              <Bracket matches={matches} />
+            </div>
+          ) : (view === "today" || view === "results") ? (
             Object.entries(groupedMatches).length > 0 ? (
               Object.entries(groupedMatches).map(([date, dayMatches]) => (
                 <div key={date} className="space-y-6">

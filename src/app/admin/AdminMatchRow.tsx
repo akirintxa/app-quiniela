@@ -11,23 +11,32 @@ interface AdminMatchRowProps {
 export default function AdminMatchRow({ match }: AdminMatchRowProps) {
   const [resultA, setResultA] = useState<number | string>(match.result_a ?? "");
   const [resultB, setResultB] = useState<number | string>(match.result_b ?? "");
+  const [winnerId, setWinnerId] = useState<number | null>(match.winner_id ?? null);
   const [loading, setLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(match.is_locked || false);
   const [isFinished, setIsFinished] = useState(match.is_finished || false);
+
+  const isKnockout = match.stage !== "group";
+  const isDraw = resultA !== "" && resultB !== "" && Number(resultA) === Number(resultB);
 
   // Sincronizar estado local cuando las props cambian (después de revalidatePath)
   useEffect(() => {
     setResultA(match.result_a ?? "");
     setResultB(match.result_b ?? "");
+    setWinnerId(match.winner_id ?? null);
     setIsLocked(match.is_locked || false);
     setIsFinished(match.is_finished || false);
-  }, [match.result_a, match.result_b, match.is_locked, match.is_finished]);
+  }, [match.result_a, match.result_b, match.winner_id, match.is_locked, match.is_finished]);
 
   const handleLiveUpdate = async () => {
     if (resultA === "" || resultB === "") return;
+    if (isKnockout && isDraw && !winnerId) {
+      alert("En eliminatorias con empate, debes seleccionar un ganador (quien pasa de ronda).");
+      return;
+    }
     setLoading(true);
     try {
-      await updateLiveScore(match.id, Number(resultA), Number(resultB));
+      await updateLiveScore(match.id, Number(resultA), Number(resultB), winnerId);
       setIsLocked(true);
     } catch (error) {
       alert("Error al actualizar");
@@ -38,11 +47,15 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
 
   const handleFinalize = async () => {
     if (resultA === "" || resultB === "") return;
+    if (isKnockout && isDraw && !winnerId) {
+      alert("En eliminatorias con empate, debes seleccionar un ganador (quien pasa de ronda).");
+      return;
+    }
     if (!confirm("¿Finalizar partido y repartir puntos?")) return;
     
     setLoading(true);
     try {
-      await finalizeMatch(match.id, Number(resultA), Number(resultB));
+      await finalizeMatch(match.id, Number(resultA), Number(resultB), winnerId);
       setIsFinished(true);
       setIsLocked(true);
     } catch (error) {
@@ -99,21 +112,43 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
         <div className="flex items-center gap-4">
           <span className="font-black text-xs uppercase w-20 text-right truncate">{match.team_a?.name}</span>
           <div className="flex items-center gap-2">
-            <input 
-              type="number" 
-              value={resultA}
-              onChange={(e) => setResultA(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={isFinished}
-              className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
-            />
+            <div className="flex flex-col items-center">
+              <input 
+                type="number" 
+                value={resultA}
+                onChange={(e) => setResultA(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={isFinished}
+                className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
+              />
+              {isKnockout && isDraw && (
+                <button 
+                  onClick={() => setWinnerId(match.team_a_id)}
+                  disabled={isFinished}
+                  className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${winnerId === match.team_a_id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-zinc-800 text-gray-400 border-gray-200 dark:border-zinc-700'}`}
+                >
+                  Gana
+                </button>
+              )}
+            </div>
             <span className="font-black text-gray-300">:</span>
-            <input 
-              type="number" 
-              value={resultB}
-              onChange={(e) => setResultB(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={isFinished}
-              className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
-            />
+            <div className="flex flex-col items-center">
+              <input 
+                type="number" 
+                value={resultB}
+                onChange={(e) => setResultB(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={isFinished}
+                className="w-12 h-12 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl"
+              />
+              {isKnockout && isDraw && (
+                <button 
+                  onClick={() => setWinnerId(match.team_b_id)}
+                  disabled={isFinished}
+                  className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${winnerId === match.team_b_id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-zinc-800 text-gray-400 border-gray-200 dark:border-zinc-700'}`}
+                >
+                  Gana
+                </button>
+              )}
+            </div>
           </div>
           <span className="font-black text-xs uppercase w-20 text-left truncate">{match.team_b?.name}</span>
         </div>

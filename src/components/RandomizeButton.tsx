@@ -2,16 +2,22 @@
 'use client';
 
 import { useState } from "react";
-import { randomizeGroupPredictions } from "@/app/actions";
+import { randomizeGroupPredictions, randomizeKnockoutPredictions } from "@/app/actions";
 
-export default function RandomizeButton({ groupId }: { groupId: string }) {
+export default function RandomizeButton({ groupId, stage }: { groupId?: string, stage?: string }) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
-    if (!confirm("¿Rellenar este grupo con pronósticos al azar? Se sobrescribirán los que ya tengas.")) return;
+    const context = groupId ? `el Grupo ${groupId}` : "esta fase";
+    if (!confirm(`¿Rellenar ${context} con pronósticos al azar? Se sobrescribirán los que ya tengas.`)) return;
+    
     setLoading(true);
     try {
-      await randomizeGroupPredictions(groupId);
+      if (groupId) {
+        await randomizeGroupPredictions(groupId);
+      } else if (stage) {
+        await randomizeKnockoutPredictions(stage);
+      }
     } catch (err) {
       alert("Error al aleatorizar");
     } finally {

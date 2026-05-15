@@ -7,7 +7,14 @@ import { createClient } from "@/utils/supabase/client";
 import { calculatePoints } from "@/lib/points";
 
 interface MatchCardProps {
-  match: Match & { is_locked?: boolean, is_finished?: boolean };
+  match: Match & { 
+    is_locked?: boolean; 
+    is_finished?: boolean;
+    placeholder_a?: string;
+    placeholder_b?: string;
+    is_confirmed_a?: boolean;
+    is_confirmed_b?: boolean;
+  };
   userId?: string;
   initialPrediction?: Prediction | null;
   poolId?: string;
@@ -21,7 +28,14 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const [saved, setSaved] = useState(false);
   
   const [showSpy, setShowSpy] = useState(false);
-  const [groupPredictions, setGroupPredictions] = useState<any[]>([]);
+  const [groupPredictions, setGroupPredictions] = useState<{
+    predicted_a: number;
+    predicted_b: number;
+    points_won: number | null;
+    user_id: string;
+    nickname: string;
+    profiles?: { nickname: string };
+  }[]>([]);
   const [loadingSpy, setLoadingSpy] = useState(false);
 
   useEffect(() => {
@@ -30,8 +44,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     setWinnerId(initialPrediction?.predicted_winner_id ?? null);
   }, [initialPrediction]);
 
-  const teamAName = match.team_a?.name || `Equipo ${match.team_a_id}`;
-  const teamBName = match.team_b?.name || `Equipo ${match.team_b_id}`;
   const startTime = new Date(match.start_time);
   
   const isMatchStarted = new Date() > startTime;
@@ -40,6 +52,15 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const isLocked = match.is_locked || isMatchStarted || isFinished;
   const isKnockout = match.stage !== "group";
   const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
+
+  const teamAName = match.team_a?.name || `Equipo ${match.team_a_id}`;
+  const teamBName = match.team_b?.name || `Equipo ${match.team_b_id}`;
+  
+  // Logic to show expected matchup (e.g. 1A vs 3X1)
+  const pA = match.placeholder_a;
+  const pB = match.placeholder_b;
+  const expectedMatchup = isKnockout ? `${pA || '?'} vs ${pB || '?'}` : null;
+
 
   const isModified = 
     scoreA !== (initialPrediction?.predicted_a ?? "") || 
@@ -133,10 +154,19 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
         if (pError) throw pError;
         
         // Ordenar: primero los que tienen más puntos, luego por nickname
-        const sortedPreds = (preds || []).map((p: any) => ({
-          ...p,
-          nickname: p.profiles?.nickname || 'Usuario'
-        })).sort((a: any, b: any) => {
+        const sortedPreds = (preds || []).map((p: {
+          predicted_a: number;
+          predicted_b: number;
+          points_won: number | null;
+          user_id: string;
+          profiles: { nickname: string } | { nickname: string }[] | null;
+        }) => {
+          const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+          return {
+            ...p,
+            nickname: profile?.nickname || 'Usuario'
+          };
+        }).sort((a, b) => {
           if ((b.points_won || 0) !== (a.points_won || 0)) return (b.points_won || 0) - (a.points_won || 0);
           return a.nickname.localeCompare(b.nickname);
         });
@@ -158,18 +188,28 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     </div>
   );
 
-  const TeamIcon = ({ team, isSelected }: { team: any, isSelected?: boolean }) => {
+  const TeamIcon = ({ team, isSelected, isConfirmed }: { team: any, isSelected?: boolean, isConfirmed?: boolean }) => {
     const flag = getFlagUrl(team);
     return (
-      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
-        {flag ? (
-          <img src={flag} alt={team.name} className="w-full h-full object-cover" onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-            // Fallback manual si la imagen falla
-            const parent = (e.target as HTMLImageElement).parentElement;
-            if (parent) parent.classList.add('bg-gray-200');
-          }} />
-        ) : <BallIcon />}
+      <div className="relative group/icon">
+        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
+          {flag ? (
+            <img src={flag} alt={team.name} className="w-full h-full object-cover" onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              const parent = (e.target as HTMLImageElement).parentElement;
+              if (parent) parent.classList.add('bg-gray-200');
+            }} />
+          ) : <BallIcon />}
+        </div>
+        {isKnockout && (
+          <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center shadow-sm ${isConfirmed ? 'bg-green-500' : 'bg-blue-400 animate-pulse'}`} title={isConfirmed ? 'Confirmado' : 'Proyectado'}>
+            {isConfirmed ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            ) : (
+              <span className="w-1 h-1 bg-white rounded-full"></span>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -192,9 +232,21 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
       <div className="p-8">
         <div className="flex flex-col items-center">
           <div className="flex justify-between w-full mb-8 px-1">
-            <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isLive ? 'bg-red-50 text-red-600 dark:bg-red-950/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
-              {getStageName(match.stage, match.group_id)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isLive ? 'bg-red-50 text-red-600 dark:bg-red-950/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
+                {getStageName(match.stage, match.group_id)}
+              </span>
+              {isKnockout && (
+                <span className="text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg">
+                  #{match.id}
+                </span>
+              )}
+            </div>
+            {expectedMatchup && (
+              <span className="text-[8px] font-black text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2 py-1 rounded-md border border-gray-100 dark:border-zinc-800">
+                {expectedMatchup}
+              </span>
+            )}
             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
               {startTime.toLocaleDateString([], { day: '2-digit', month: 'short' })} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
@@ -219,7 +271,7 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
               onClick={() => setWinnerId(match.team_a_id)}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_a} isSelected={winnerId === match.team_a_id && isDraw} />
+              <TeamIcon team={match.team_a} isSelected={winnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} />
               <div className="h-8 flex items-center justify-center">
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
               </div>
@@ -243,7 +295,7 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
               onClick={() => setWinnerId(match.team_b_id)}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_b} isSelected={winnerId === match.team_b_id && isDraw} />
+              <TeamIcon team={match.team_b} isSelected={winnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} />
               <div className="h-8 flex items-center justify-center">
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>
               </div>
