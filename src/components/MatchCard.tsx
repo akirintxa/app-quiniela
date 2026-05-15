@@ -34,7 +34,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     points_won: number | null;
     user_id: string;
     nickname: string;
-    profiles?: { nickname: string };
   }[]>([]);
   const [loadingSpy, setLoadingSpy] = useState(false);
 
@@ -127,7 +126,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     
     try {
       const supabase = createClient();
-      // 1. Obtener los IDs de los miembros de esta liga
       const { data: members, error: mError } = await supabase
         .from('pool_members')
         .select('user_id')
@@ -138,7 +136,6 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
       if (members && members.length > 0) {
         const memberIds = members.map(m => m.user_id);
         
-        // 2. Obtener las predicciones de esos miembros para este partido
         const { data: preds, error: pError } = await supabase
           .from('predictions')
           .select(`
@@ -153,17 +150,13 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
 
         if (pError) throw pError;
         
-        // Ordenar: primero los que tienen más puntos, luego por nickname
-        const sortedPreds = (preds || []).map((p: {
-          predicted_a: number;
-          predicted_b: number;
-          points_won: number | null;
-          user_id: string;
-          profiles: { nickname: string } | { nickname: string }[] | null;
-        }) => {
+        const sortedPreds = (preds || []).map((p: any) => {
           const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
           return {
-            ...p,
+            predicted_a: p.predicted_a,
+            predicted_b: p.predicted_b,
+            points_won: p.points_won,
+            user_id: p.user_id,
             nickname: profile?.nickname || 'Usuario'
           };
         }).sort((a, b) => {
@@ -345,11 +338,11 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             <div className="grid grid-cols-1 gap-3">
               {groupPredictions.map((pred, i) => {
                 let displayPoints = pred.points_won;
-                if (isLive) displayPoints = calculatePoints(pred as Prediction, match);
+                if (isLive) displayPoints = calculatePoints(pred as any as Prediction, match);
                 return (
                   <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter">{pred.profiles?.nickname}</span>
+                      <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter">{pred.nickname}</span>
                       {displayPoints !== null && displayPoints !== undefined && <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>}
                     </div>
                     <div className="flex items-center gap-3">
