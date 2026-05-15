@@ -181,7 +181,7 @@ export default async function Home({
     };
   });
 
-  const groupTeams: Team[] = [];
+  let groupTeams: Team[] = [];
   let standings: any[] = [];
   let predictedStandings: any[] = [];
 
