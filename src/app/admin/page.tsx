@@ -71,6 +71,9 @@ export default async function AdminPage({
             <p className="text-gray-500 dark:text-zinc-400 font-bold uppercase text-xs tracking-widest mt-1">
               Solo para Administradores
             </p>
+            <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mt-3 max-w-md leading-relaxed">
+              1. Iniciar 0-0 · 2. Actualizar marcador (tiempo real en la app) · 3. Finalizar · ↺ Reiniciar
+            </p>
           </div>
           <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
             Volver

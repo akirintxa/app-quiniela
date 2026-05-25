@@ -26,9 +26,20 @@ export default function RealtimeRankingListener() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'matches',
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
         },
         () => {
           router.refresh();

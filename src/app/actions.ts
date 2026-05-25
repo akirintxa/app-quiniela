@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
+import { createServiceRoleClient } from '@/utils/supabase/admin';
+import { resolveKnockoutWinnerId } from '@/lib/match-admin';
 import { calculatePoints } from '@/lib/points';
 import { isTournamentStarted } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
@@ -445,101 +447,212 @@ export async function updateProfile(formData: FormData) {
   return { success: true };
 }
 
-// ADMIN Actions
-async function updatePredictionsPoints(supabase: any, matchId: number, matchData: any) {
-  const { data: predictions, error: fetchError } = await supabase.from('predictions').select('*').eq('match_id', matchId);
-  
+// ADMIN Actions (service role tras validar email — ver SUPABASE_SERVICE_ROLE_KEY)
+
+export type AdminMatchActionResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+async function getAdminDb() {
+  await checkAdmin();
+  return createServiceRoleClient();
+}
+
+function revalidateAfterMatchUpdate() {
+  revalidatePath('/');
+  revalidatePath('/admin');
+  revalidatePath('/ranking');
+  revalidatePath('/groups');
+  revalidatePath('/profile');
+}
+
+async function updatePredictionsPoints(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  matchId: number,
+  matchData: Match
+) {
+  const { data: predictions, error: fetchError } = await supabase
+    .from('predictions')
+    .select('*')
+    .eq('match_id', matchId);
+
   if (fetchError) {
-    console.error("Error fetching predictions for points update:", fetchError);
-    return;
+    console.error('updatePredictionsPoints fetch:', fetchError);
+    throw new Error(fetchError.message);
   }
 
-  if (predictions && predictions.length > 0) {
-    const updates = predictions.map((pred: any) => ({
-      id: pred.id, 
-      user_id: pred.user_id, 
-      match_id: pred.match_id,
-      points_won: calculatePoints(pred, matchData as Match)
-    }));
+  if (!predictions?.length) return;
 
-    const { error: upsertError } = await supabase.from('predictions').upsert(updates);
-    if (upsertError) {
-      console.error("Error upserting points_won:", upsertError);
-      throw new Error("No se pudieron repartir los puntos. Verifica los permisos RLS.");
+  for (const pred of predictions) {
+    const points = calculatePoints(pred as Prediction, matchData);
+    const { error } = await supabase
+      .from('predictions')
+      .update({ points_won: points })
+      .eq('id', pred.id);
+    if (error) {
+      console.error('updatePredictionsPoints row:', error);
+      throw new Error(error.message);
     }
   }
 }
 
-export async function updateLiveScore(matchId: number, resultA: number, resultB: number, winnerId: number | null = null) {
-  const supabase = await checkAdmin();
-  const { data: match, error } = await supabase
+async function loadMatchForAdmin(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  matchId: number
+): Promise<Match> {
+  const { data, error } = await supabase
     .from('matches')
-    .update({ result_a: resultA, result_b: resultB, winner_id: winnerId, is_locked: true })
+    .select('*')
     .eq('id', matchId)
-    .select()
     .single();
+  if (error || !data) throw new Error(error?.message || 'Partido no encontrado');
+  return data as Match;
+}
 
-  if (error) throw error;
+/** Partido iniciado: 0-0, predicciones bloqueadas, puntos en vivo recalculables */
+export async function startMatch(
+  matchId: number
+): Promise<AdminMatchActionResult> {
+  try {
+    const supabase = await getAdminDb();
+    const existing = await loadMatchForAdmin(supabase, matchId);
+    const winnerId = resolveKnockoutWinnerId(existing, 0, 0, null);
 
-  if (match) {
-    await updatePredictionsPoints(supabase, matchId, match);
+    const { data: match, error } = await supabase
+      .from('matches')
+      .update({
+        result_a: 0,
+        result_b: 0,
+        winner_id: winnerId,
+        is_locked: true,
+        is_finished: false,
+      })
+      .eq('id', matchId)
+      .select()
+      .single();
+
+    if (error) return { ok: false, error: error.message };
+    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    revalidateAfterMatchUpdate();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al iniciar' };
   }
-
-  revalidatePath('/'); 
-  revalidatePath('/admin');
-  revalidatePath('/ranking');
 }
 
-export async function finalizeMatch(matchId: number, resultA: number, resultB: number, winnerId: number | null = null) {
-  const supabase = await checkAdmin();
-  const { data: match, error } = await supabase
-    .from('matches')
-    .update({ result_a: resultA, result_b: resultB, winner_id: winnerId, is_locked: true, is_finished: true })
-    .eq('id', matchId)
-    .select()
-    .single();
+/** Actualiza marcador en vivo y reparte puntos provisionalmente */
+export async function updateLiveScore(
+  matchId: number,
+  resultA: number,
+  resultB: number,
+  winnerId: number | null = null
+): Promise<AdminMatchActionResult> {
+  try {
+    const supabase = await getAdminDb();
+    const existing = await loadMatchForAdmin(supabase, matchId);
+    const resolvedWinner = resolveKnockoutWinnerId(
+      existing,
+      resultA,
+      resultB,
+      winnerId
+    );
 
-  if (error) throw error;
+    const { data: match, error } = await supabase
+      .from('matches')
+      .update({
+        result_a: resultA,
+        result_b: resultB,
+        winner_id: resolvedWinner,
+        is_locked: true,
+        is_finished: false,
+      })
+      .eq('id', matchId)
+      .select()
+      .single();
 
-  if (match) {
-    await updatePredictionsPoints(supabase, matchId, match);
+    if (error) return { ok: false, error: error.message };
+    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    revalidateAfterMatchUpdate();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al actualizar' };
   }
-
-  revalidatePath('/'); 
-  revalidatePath('/ranking'); 
-  revalidatePath('/admin'); 
-  revalidatePath('/groups');
 }
 
-export async function resetMatch(matchId: number) {
-  const supabase = await checkAdmin();
-  // 1. Resetear el partido a su estado inicial
-  const { error: matchError } = await supabase.from('matches').update({ 
-    result_a: null, 
-    result_b: null, 
-    winner_id: null,
-    is_locked: false, 
-    is_finished: false 
-  }).eq('id', matchId);
+export async function finalizeMatch(
+  matchId: number,
+  resultA: number,
+  resultB: number,
+  winnerId: number | null = null
+): Promise<AdminMatchActionResult> {
+  try {
+    const supabase = await getAdminDb();
+    const existing = await loadMatchForAdmin(supabase, matchId);
+    const resolvedWinner = resolveKnockoutWinnerId(
+      existing,
+      resultA,
+      resultB,
+      winnerId
+    );
 
-  if (matchError) throw matchError;
+    if (existing.stage !== 'group' && resultA === resultB && !resolvedWinner) {
+      return {
+        ok: false,
+        error: 'En eliminatorias con empate debes indicar quién pasa de ronda',
+      };
+    }
 
-  // 2. Limpiar los puntos de todas las predicciones de este partido
-  const { error: predError } = await supabase.from('predictions').update({ points_won: null }).eq('match_id', matchId);
-  
-  if (predError) throw predError;
+    const { data: match, error } = await supabase
+      .from('matches')
+      .update({
+        result_a: resultA,
+        result_b: resultB,
+        winner_id: resolvedWinner,
+        is_locked: true,
+        is_finished: true,
+      })
+      .eq('id', matchId)
+      .select()
+      .single();
 
-  // 3. Revalidar todas las rutas posibles para que el cambio sea instantáneo
-  revalidatePath('/'); 
-  revalidatePath('/ranking'); 
-  revalidatePath('/admin'); 
-  revalidatePath('/groups');
-  revalidatePath('/groups/[id]', 'page');
+    if (error) return { ok: false, error: error.message };
+    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    revalidateAfterMatchUpdate();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al finalizar' };
+  }
 }
 
-export async function toggleMatchLock(matchId: number, isLocked: boolean) {
-  const supabase = await checkAdmin();
-  const { error } = await supabase.from('matches').update({ is_locked: isLocked }).eq('id', matchId);
-  if (error) throw error;
-  revalidatePath('/'); revalidatePath('/admin');
+export async function resetMatch(
+  matchId: number
+): Promise<AdminMatchActionResult> {
+  try {
+    const supabase = await getAdminDb();
+
+    const { error: matchError } = await supabase
+      .from('matches')
+      .update({
+        result_a: null,
+        result_b: null,
+        winner_id: null,
+        is_locked: false,
+        is_finished: false,
+      })
+      .eq('id', matchId);
+
+    if (matchError) return { ok: false, error: matchError.message };
+
+    const { error: predError } = await supabase
+      .from('predictions')
+      .update({ points_won: null })
+      .eq('match_id', matchId);
+
+    if (predError) return { ok: false, error: predError.message };
+
+    revalidateAfterMatchUpdate();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Error al reiniciar' };
+  }
 }

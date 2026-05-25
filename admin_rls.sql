@@ -1,0 +1,20 @@
+-- Opcional si NO usas SUPABASE_SERVICE_ROLE_KEY en el servidor.
+-- Recomendado: usar service role en acciones admin (admin.ts) y no exponer esta clave al cliente.
+--
+-- Sustituye los emails por los de ADMIN_EMAIL (mismos que en Vercel).
+
+-- ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
+--
+-- DROP POLICY IF EXISTS "Admin emails can update matches" ON public.matches;
+-- CREATE POLICY "Admin emails can update matches"
+-- ON public.matches FOR UPDATE
+-- TO authenticated
+-- USING (auth.jwt() ->> 'email' IN ('tu@email.com'))
+-- WITH CHECK (auth.jwt() ->> 'email' IN ('tu@email.com'));
+--
+-- DROP POLICY IF EXISTS "Admin emails can update all predictions points" ON public.predictions;
+-- CREATE POLICY "Admin emails can update all predictions points"
+-- ON public.predictions FOR UPDATE
+-- TO authenticated
+-- USING (auth.jwt() ->> 'email' IN ('tu@email.com'))
+-- WITH CHECK (auth.jwt() ->> 'email' IN ('tu@email.com'));

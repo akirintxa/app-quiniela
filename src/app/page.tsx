@@ -12,8 +12,7 @@ import KnockoutStageBoard from "@/components/knockout/KnockoutStageBoard";
 import { KnockoutMatchViewModel } from "@/types/knockout";
 import { Suspense } from "react";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
-import { getFavoriteBonusForUser, getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
-import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
+import { getUserGlobalRankStats } from "@/lib/global-ranking";
 
 export default async function Home({
   searchParams,
@@ -109,50 +108,13 @@ export default async function Home({
   let predictions: Prediction[] = [];
   let userStats = { points: 0, rank: 0, bonusPoints: 0 };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("favorite_team_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
   const { data: userPreds } = await supabase.from("predictions").select("*").eq("user_id", user.id);
-  const matchPoints = userPreds
-    ? userPreds.reduce((acc, curr) => acc + (curr.points_won || 0), 0)
-    : 0;
   if (userPreds) predictions = userPreds;
 
-  const favoriteBonus = await getFavoriteBonusForUser(
-    supabase,
-    user.id,
-    profile?.favorite_team_id
-  );
-  userStats.bonusPoints = favoriteBonus.total;
-  userStats.points = getTotalPointsWithFavoriteBonus(matchPoints, favoriteBonus);
-
-  const { data: allPoints } = await supabase.from("predictions").select("user_id, points_won");
-  const { data: allProfiles } = await supabase.from("profiles").select("id, favorite_team_id");
-  if (allPoints) {
-    const globalScores: Record<string, number> = {};
-    allPoints.forEach((p) => {
-      globalScores[p.user_id] = (globalScores[p.user_id] || 0) + (p.points_won || 0);
-    });
-    const favoriteBonuses = await getFavoriteBonusesForUsers(
-      supabase,
-      (allProfiles || []).map((p) => ({
-        id: p.id,
-        favorite_team_id: p.favorite_team_id,
-      }))
-    );
-    const sortedTotals = Object.keys(globalScores)
-      .map((uid) =>
-        getTotalPointsWithFavoriteBonus(
-          globalScores[uid],
-          favoriteBonuses[uid] ?? { total: 0, awards: [] }
-        )
-      )
-      .sort((a, b) => b - a);
-    userStats.rank = sortedTotals.indexOf(userStats.points) + 1;
-  }
+  const rankStats = await getUserGlobalRankStats(supabase, user.id);
+  userStats.points = rankStats.points;
+  userStats.bonusPoints = rankStats.bonusPoints;
+  userStats.rank = rankStats.rank;
 
   const groupCompletion: Record<string, boolean> = {};
   const allGroups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
@@ -333,16 +295,20 @@ export default async function Home({
           </div>
 
           <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
-            <div className="text-center">
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1 inline-flex items-center justify-center gap-1.5">
+            <div className="text-center min-w-0 flex-1">
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">
                 Tu Puntuación
-                <ScoringRulesButton size="sm" />
               </span>
               <span className="text-2xl font-black text-blue-600 leading-none">{userStats.points}</span>
             </div>
-            <div className="w-px h-8 bg-gray-100 dark:bg-zinc-800"></div>
-            <div className="text-center">
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Ranking Global</span>
+            <div className="w-px h-8 bg-gray-100 dark:bg-zinc-800 shrink-0"></div>
+            <div className="text-center min-w-0 flex-1">
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                <span className="inline-flex items-center justify-center gap-2">
+                  Ranking Global
+                  <ScoringRulesButton size="sm" />
+                </span>
+              </span>
               <span className="text-2xl font-black text-gray-900 dark:text-white leading-none">#{userStats.rank || '--'}</span>
             </div>
           </div>
@@ -357,12 +323,16 @@ export default async function Home({
 
         {view === 'groups' && (
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2 mb-10">
-            <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2">
+            <div className="grid grid-cols-4 gap-3 w-full sm:flex sm:flex-wrap sm:gap-2 sm:w-auto">
               {groups.map(g => (
-                <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-full aspect-square sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
+                <Link
+                  key={g}
+                  href={`/?view=groups&group=${g}`}
+                  className={`relative flex items-center justify-center min-h-[3.25rem] sm:min-h-0 sm:w-10 sm:h-10 rounded-2xl sm:rounded-xl text-base sm:text-[10px] font-black transition-all touch-manipulation active:scale-95 ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}
+                >
                   {g}
-                  {groupCompletion[g] === false && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 border-2 border-white dark:border-black rounded-full shadow-sm"></span>}
-                  {groupCompletion[g] === true && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full shadow-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>}
+                  {groupCompletion[g] === false && <span className="absolute top-1 right-1 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-2.5 sm:h-2.5 bg-orange-500 border-2 border-white dark:border-black rounded-full shadow-sm"></span>}
+                  {groupCompletion[g] === true && <span className="absolute top-1 right-1 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-2.5 sm:h-2.5 bg-green-500 border-2 border-white dark:border-black rounded-full shadow-sm flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>}
                 </Link>
               ))}
             </div>
@@ -422,10 +392,6 @@ export default async function Home({
         <section className="space-y-10">
           {view === "groups" && (
             <div className="animate-in fade-in zoom-in duration-500">
-              <div className="mb-6 bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800">
-                <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 italic">Clasificación Grupo {selectedGroup}</h2>
-                <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Basado en tus predicciones actuales</p>
-              </div>
               {groupTeams.length > 0 ? (
                 <GroupStandings stats={standings} predictedStats={predictedStandings} />
               ) : (

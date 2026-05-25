@@ -11,8 +11,11 @@ import DeletePoolButton from "@/components/DeletePoolButton";
 import { calculateStandings } from "@/lib/standings";
 import { resolveKnockoutTeams } from "@/lib/knockout";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
-import { getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
+import {
+  buildPlayerStandings,
+  sortStandingsByTotal,
+} from "@/lib/global-ranking";
 import { formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -109,12 +112,13 @@ export default async function GroupDetailPage({
     .select("user_id, points_won, match_id")
     .in("user_id", memberIds);
 
-  const favoriteBonuses = await getFavoriteBonusesForUsers(
-    supabase,
-    (profilesData || []).map((p) => ({
-      id: p.id,
-      favorite_team_id: p.favorite_team_id,
-    }))
+  const profileRows = (profilesData || []).map((p) => ({
+    id: p.id,
+    favorite_team_id: p.favorite_team_id,
+  }));
+
+  const standings = sortStandingsByTotal(
+    await buildPlayerStandings(supabase, profileRows)
   );
 
   const { data: finishedMatches } = await supabase
@@ -124,30 +128,36 @@ export default async function GroupDetailPage({
     .order("start_time", { ascending: false });
   const lastMatchId = finishedMatches?.[0]?.id;
 
-  const currentScores: Record<string, number> = {};
-  const previousScores: Record<string, number> = {};
+  const previousMatchPoints: Record<string, number> = {};
   memberIds.forEach((id) => {
-    currentScores[id] = 0;
-    previousScores[id] = 0;
+    previousMatchPoints[id] = 0;
   });
 
   predictionsData?.forEach((p) => {
-    if (currentScores[p.user_id] !== undefined) {
-      currentScores[p.user_id] += p.points_won || 0;
+    if (previousMatchPoints[p.user_id] !== undefined) {
       if (
         p.match_id !== lastMatchId &&
         finishedMatches?.some((m) => m.id === p.match_id)
       ) {
-        previousScores[p.user_id] += p.points_won || 0;
+        previousMatchPoints[p.user_id] += p.points_won || 0;
       }
     }
   });
 
-  const currentRanked = Object.keys(currentScores)
-    .map((id) => ({ id, points: currentScores[id] }))
-    .sort((a, b) => b.points - a.points);
-  const previousRanked = Object.keys(previousScores)
-    .map((id) => ({ id, points: previousScores[id] }))
+  const standingByUser = new Map(standings.map((s) => [s.userId, s]));
+
+  const previousRanked = profileRows
+    .map((p) => {
+      const st = standingByUser.get(p.id);
+      const bonus = st?.bonusPoints ?? 0;
+      return {
+        id: p.id,
+        points: getTotalPointsWithFavoriteBonus(previousMatchPoints[p.id] ?? 0, {
+          total: bonus,
+          awards: [],
+        }),
+      };
+    })
     .sort((a, b) => b.points - a.points);
 
   const userMap: Record<
@@ -164,7 +174,8 @@ export default async function GroupDetailPage({
   > = {};
 
   profilesData?.forEach((p) => {
-    const curPos = currentRanked.findIndex((r) => r.id === p.id);
+    const st = standingByUser.get(p.id);
+    const curPos = standings.findIndex((s) => s.userId === p.id);
     const prePos = previousRanked.findIndex((r) => r.id === p.id);
     let trend = "same";
     if (lastMatchId) {
@@ -172,17 +183,12 @@ export default async function GroupDetailPage({
       else if (curPos > prePos) trend = "down";
     }
     const favTeam = p.favorite_team_id ? teamsById.get(p.favorite_team_id) : null;
-    const matchPts = currentScores[p.id] || 0;
-    const bonus = favoriteBonuses[p.id]?.total ?? 0;
     userMap[p.id] = {
       id: p.id,
       nickname: p.nickname || "Usuario",
       flagUrl: getFavoriteTeamFlagUrl(favTeam ?? null, 40),
-      bonusPoints: bonus,
-      points: getTotalPointsWithFavoriteBonus(
-        matchPts,
-        favoriteBonuses[p.id] ?? { total: 0, awards: [] }
-      ),
+      bonusPoints: st?.bonusPoints ?? 0,
+      points: st?.totalPoints ?? 0,
       trend,
       isMe: p.id === user.id,
     };

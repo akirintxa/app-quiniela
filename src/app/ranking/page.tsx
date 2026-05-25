@@ -8,8 +8,11 @@ import ShareRankingButton from "@/components/ShareRankingButton";
 import MemberBadge from "@/components/MemberBadge";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
-import { getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
+import {
+  buildPlayerStandings,
+  sortStandingsByTotal,
+} from "@/lib/global-ranking";
 import {
   formatPointsBreakdown,
   getPointsBreakdown,
@@ -76,58 +79,77 @@ export default async function RankingPage({
 
       const targetIds = filteredProfiles.map(p => p.id);
 
-      const favoriteBonuses = await getFavoriteBonusesForUsers(
-        supabase,
-        filteredProfiles.map((p) => ({
-          id: p.id,
-          favorite_team_id: p.favorite_team_id,
-        }))
+      const profileRows = filteredProfiles.map((p) => ({
+        id: p.id,
+        favorite_team_id: p.favorite_team_id,
+      }));
+
+      const standings = sortStandingsByTotal(
+        await buildPlayerStandings(supabase, profileRows)
       );
 
-      // 3. Obtener puntos acumulados de forma segura
       const { data: predictionsData } = await supabase
-        .from('predictions')
-        .select('user_id, points_won, match_id')
-        .in('user_id', targetIds);
+        .from("predictions")
+        .select("user_id, points_won, match_id")
+        .in("user_id", targetIds);
 
-      const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
+      const { data: finishedMatches } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("is_finished", true)
+        .order("start_time", { ascending: false });
       const lastMatchId = finishedMatches?.[0]?.id;
 
-      const currentScores: Record<string, number> = {};
-      const previousScores: Record<string, number> = {};
-      targetIds.forEach(id => { currentScores[id] = 0; previousScores[id] = 0; });
+      const previousMatchPoints: Record<string, number> = {};
+      targetIds.forEach((id) => {
+        previousMatchPoints[id] = 0;
+      });
 
-      predictionsData?.forEach(p => {
-        if (currentScores[p.user_id] !== undefined) {
-          currentScores[p.user_id] += p.points_won || 0;
-          if (p.match_id !== lastMatchId && finishedMatches?.some(m => m.id === p.match_id)) {
-            previousScores[p.user_id] += p.points_won || 0;
+      predictionsData?.forEach((p) => {
+        if (previousMatchPoints[p.user_id] !== undefined) {
+          if (
+            p.match_id !== lastMatchId &&
+            finishedMatches?.some((m) => m.id === p.match_id)
+          ) {
+            previousMatchPoints[p.user_id] += p.points_won || 0;
           }
         }
       });
 
-      const currentRanked = Object.keys(currentScores).map(id => ({ id, points: currentScores[id] })).sort((a, b) => b.points - a.points);
-      const previousRanked = Object.keys(previousScores).map(id => ({ id, points: previousScores[id] })).sort((a, b) => b.points - a.points);
+      const standingByUser = new Map(standings.map((s) => [s.userId, s]));
 
-      filteredProfiles.forEach(p => {
-        const curPos = currentRanked.findIndex(r => r.id === p.id);
-        const prePos = previousRanked.findIndex(r => r.id === p.id);
-        let trend = 'same';
+      const previousRanked = profileRows
+        .map((p) => {
+          const st = standingByUser.get(p.id);
+          const bonus = st?.bonusPoints ?? 0;
+          return {
+            id: p.id,
+            points: getTotalPointsWithFavoriteBonus(
+              previousMatchPoints[p.id] ?? 0,
+              { total: bonus, awards: [] }
+            ),
+          };
+        })
+        .sort((a, b) => b.points - a.points);
+
+      filteredProfiles.forEach((p) => {
+        const st = standingByUser.get(p.id);
+        const curPos = standings.findIndex((s) => s.userId === p.id);
+        const prePos = previousRanked.findIndex((r) => r.id === p.id);
+        let trend = "same";
         if (lastMatchId) {
-          if (curPos < prePos) trend = 'up';
-          else if (curPos > prePos) trend = 'down';
+          if (curPos < prePos) trend = "up";
+          else if (curPos > prePos) trend = "down";
         }
         const favTeam = p.favorite_team_id ? teamsById.get(p.favorite_team_id) : null;
-        const matchPts = currentScores[p.id] || 0;
-        const bonus = favoriteBonuses[p.id]?.total ?? 0;
         userMap[p.id] = {
           id: p.id,
-          nickname: p.nickname || 'Usuario',
+          nickname: p.nickname || "Usuario",
           flagUrl: getFavoriteTeamFlagUrl(favTeam ?? null, 40),
-          matchPoints: matchPts,
-          bonusPoints: bonus,
-          points: getTotalPointsWithFavoriteBonus(matchPts, favoriteBonuses[p.id] ?? { total: 0, awards: [] }),
-          bonusAwards: favoriteBonuses[p.id]?.awards ?? [],
+          matchPoints: st?.matchPoints ?? 0,
+          bonusPoints: st?.bonusPoints ?? 0,
+          points: st?.totalPoints ?? 0,
+          bonusAwards: [],
           trend,
           isMe: p.id === user.id,
         };
