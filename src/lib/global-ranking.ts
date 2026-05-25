@@ -17,7 +17,8 @@ export type PlayerStanding = {
 /** Misma lógica que el ranking global: todos los perfiles, partidos + bono favorito */
 export async function buildPlayerStandings(
   supabase: SupabaseClient,
-  profiles: ProfileForRanking[]
+  profiles: ProfileForRanking[],
+  prefetchedPredictions?: { user_id: string; points_won: number | null }[]
 ): Promise<PlayerStanding[]> {
   if (profiles.length === 0) return [];
 
@@ -27,10 +28,17 @@ export async function buildPlayerStandings(
     matchPoints[id] = 0;
   });
 
-  const { data: predictions } = await supabase
-    .from("predictions")
-    .select("user_id, points_won")
-    .in("user_id", ids);
+  let predictions: { user_id: string; points_won: number | null }[] | null =
+    null;
+  if (prefetchedPredictions) {
+    predictions = prefetchedPredictions;
+  } else {
+    const { data } = await supabase
+      .from("predictions")
+      .select("user_id, points_won")
+      .in("user_id", ids);
+    predictions = data;
+  }
 
   predictions?.forEach((p) => {
     if (matchPoints[p.user_id] !== undefined) {

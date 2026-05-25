@@ -1,21 +1,7 @@
--- Políticas de lectura pública para partidos y equipos (usuarios autenticados)
--- Ejecutar en Supabase si las tablas tienen RLS activado y la app no muestra datos.
+-- Permite a miembros de una misma liga leer las predicciones de sus compañeros.
+-- Ejecutar en Supabase SQL Editor si el ojito de liga solo muestra tu predicción.
 
-ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.predictions ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Authenticated users can read teams" ON public.teams;
-CREATE POLICY "Authenticated users can read teams"
-ON public.teams FOR SELECT
-TO authenticated
-USING (true);
-
-DROP POLICY IF EXISTS "Authenticated users can read matches" ON public.matches;
-CREATE POLICY "Authenticated users can read matches"
-ON public.matches FOR SELECT
-TO authenticated
-USING (true);
 
 DROP POLICY IF EXISTS "Users manage own predictions" ON public.predictions;
 DROP POLICY IF EXISTS "Users read own and pool mate predictions" ON public.predictions;

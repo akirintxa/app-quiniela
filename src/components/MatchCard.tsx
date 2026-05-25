@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Match, Prediction } from "@/types";
-import { savePrediction } from "@/app/actions";
-import { createClient } from "@/utils/supabase/client";
+import { savePrediction, fetchPoolMatchPredictions } from "@/app/actions";
 import { calculatePoints, formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 
 interface MatchCardProps {
@@ -21,6 +20,8 @@ interface MatchCardProps {
   userId?: string;
   initialPrediction?: Prediction | null;
   poolId?: string;
+  poolMembers?: { id: string; nickname: string }[];
+  phaseCompleteByUser?: Record<string, boolean>;
   suppressSave?: boolean;
   controlledDraft?: {
     scoreA: number | string;
@@ -39,6 +40,8 @@ export default function MatchCard({
   userId,
   initialPrediction,
   poolId,
+  poolMembers,
+  phaseCompleteByUser,
   suppressSave = false,
   controlledDraft,
   onDraftChange,
@@ -74,11 +77,12 @@ export default function MatchCard({
   
   const [showSpy, setShowSpy] = useState(false);
   const [groupPredictions, setGroupPredictions] = useState<{
-    predicted_a: number;
-    predicted_b: number;
+    predicted_a: number | null;
+    predicted_b: number | null;
     points_won: number | null;
     user_id: string;
     nickname: string;
+    phaseComplete: boolean;
   }[]>([]);
   const [loadingSpy, setLoadingSpy] = useState(false);
 
@@ -171,54 +175,20 @@ export default function MatchCard({
   };
 
   const fetchGroupPredictions = async () => {
-    if (!poolId) return;
+    if (!poolId || !poolMembers?.length) return;
     if (showSpy) { setShowSpy(false); return; }
-    
+
     setLoadingSpy(true);
     setShowSpy(true);
-    
+
     try {
-      const supabase = createClient();
-      const { data: members, error: mError } = await supabase
-        .from('pool_members')
-        .select('user_id')
-        .eq('pool_id', poolId);
-      
-      if (mError) throw mError;
-
-      if (members && members.length > 0) {
-        const memberIds = members.map(m => m.user_id);
-        
-        const { data: preds, error: pError } = await supabase
-          .from('predictions')
-          .select(`
-            predicted_a, 
-            predicted_b, 
-            points_won, 
-            user_id, 
-            profiles (nickname)
-          `)
-          .eq('match_id', match.id)
-          .in('user_id', memberIds);
-
-        if (pError) throw pError;
-        
-        const sortedPreds = (preds || []).map((p: any) => {
-          const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
-          return {
-            predicted_a: p.predicted_a,
-            predicted_b: p.predicted_b,
-            points_won: p.points_won,
-            user_id: p.user_id,
-            nickname: profile?.nickname || 'Usuario'
-          };
-        }).sort((a, b) => {
-          if ((b.points_won || 0) !== (a.points_won || 0)) return (b.points_won || 0) - (a.points_won || 0);
-          return a.nickname.localeCompare(b.nickname);
-        });
-
-        setGroupPredictions(sortedPreds);
-      }
+      const sortedPreds = await fetchPoolMatchPredictions(
+        poolId,
+        match.id,
+        poolMembers,
+        phaseCompleteByUser ?? {}
+      );
+      setGroupPredictions(sortedPreds);
     } catch (error) {
       console.error("Error fetching group predictions:", error);
     } finally {
@@ -395,7 +365,7 @@ export default function MatchCard({
                 {loading ? "..." : saved ? "¡Listo!" : (!isModified && hasData) ? "Guardado" : "Confirmar"}
               </button>
             )}
-            {poolId && (
+            {poolId && poolMembers && poolMembers.length > 0 && (
               <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -408,26 +378,66 @@ export default function MatchCard({
       {showSpy && (
         <div className="border-t border-gray-50 dark:border-zinc-800 p-8 bg-gray-50/30 dark:bg-zinc-950/20">
           <div className="flex justify-between items-center mb-6">
-            <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 flex items-center gap-3">Ranking de Pronósticos</h4>
+            <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 flex items-center gap-3">
+              Ranking de Pronósticos
+              <span className="text-[7px] font-bold normal-case tracking-normal text-gray-300 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> ok
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> pendiente
+                </span>
+              </span>
+            </h4>
             {isLive && <span className="text-[8px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-md animate-pulse">Puntos Live</span>}
           </div>
           {loadingSpy ? (
             <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest italic">Cargando...</div>
           ) : groupPredictions.length > 0 ? (
             <div className="grid grid-cols-1 gap-3">
-              {groupPredictions.map((pred, i) => {
+              {groupPredictions.map((pred) => {
+                const hasPrediction =
+                  pred.predicted_a != null && pred.predicted_b != null;
                 let displayPoints = pred.points_won;
-                if (isLive) displayPoints = calculatePoints(pred as any as Prediction, match);
+                if (isLive && hasPrediction) {
+                  displayPoints = calculatePoints(
+                    {
+                      predicted_a: pred.predicted_a!,
+                      predicted_b: pred.predicted_b!,
+                    } as Prediction,
+                    match
+                  );
+                }
                 return (
-                  <div key={i} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter">{pred.nickname}</span>
-                      {displayPoints !== null && displayPoints !== undefined && <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>}
+                  <div key={pred.user_id} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 border-2 border-white dark:border-zinc-900 shadow-sm ${
+                          pred.phaseComplete ? "bg-green-500" : "bg-orange-500"
+                        }`}
+                        title={
+                          pred.phaseComplete
+                            ? "Fase completa"
+                            : "Fase incompleta"
+                        }
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter truncate">{pred.nickname}</span>
+                        {displayPoints !== null && displayPoints !== undefined && (
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_a}</span>
-                      <span className="font-black text-gray-200">:</span>
-                      <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_b}</span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {hasPrediction ? (
+                        <>
+                          <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_a}</span>
+                          <span className="font-black text-gray-200">:</span>
+                          <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_b}</span>
+                        </>
+                      ) : (
+                        <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic px-2">Sin predicción</span>
+                      )}
                     </div>
                   </div>
                 );

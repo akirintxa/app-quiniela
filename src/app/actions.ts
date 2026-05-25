@@ -13,6 +13,10 @@ import {
 } from '@/lib/knockout-invalidation';
 import { Match, Prediction } from '@/types';
 import { GroupId } from '@/types/knockout';
+import {
+  fetchPoolMatchPredictionsForMembers,
+  type PoolMatchPredictionRow,
+} from '@/lib/pool-predictions-server';
 
 // Helper to check admin permission
 async function checkAdmin() {
@@ -36,6 +40,25 @@ async function invalidateKnockoutPredictions(
   const unique = [...new Set(matchIds)].filter(Boolean);
   if (unique.length === 0) return;
   await supabase.from('predictions').delete().eq('user_id', userId).in('match_id', unique);
+}
+
+export async function fetchPoolMatchPredictions(
+  poolId: string,
+  matchId: number,
+  memberProfiles: { id: string; nickname: string }[],
+  phaseCompleteByUser: Record<string, boolean>
+): Promise<PoolMatchPredictionRow[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Debes iniciar sesión');
+
+  return fetchPoolMatchPredictionsForMembers(
+    poolId,
+    user.id,
+    matchId,
+    memberProfiles,
+    phaseCompleteByUser
+  );
 }
 
 // USER: Save a prediction

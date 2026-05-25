@@ -17,6 +17,12 @@ import {
   sortStandingsByTotal,
 } from "@/lib/global-ranking";
 import { formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
+import { fetchPoolMemberPredictions } from "@/lib/pool-predictions-server";
+import {
+  buildPhaseCompletionByUser,
+  getPhaseMatchIds,
+  type PhaseContext,
+} from "@/lib/phase-completion";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -107,10 +113,11 @@ export default async function GroupDetailPage({
     [];
   const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteTeamIds);
 
-  const { data: predictionsData } = await supabase
-    .from("predictions")
-    .select("user_id, points_won, match_id")
-    .in("user_id", memberIds);
+  const poolPredictions = await fetchPoolMemberPredictions(
+    poolId,
+    user.id,
+    memberIds
+  );
 
   const profileRows = (profilesData || []).map((p) => ({
     id: p.id,
@@ -118,7 +125,14 @@ export default async function GroupDetailPage({
   }));
 
   const standings = sortStandingsByTotal(
-    await buildPlayerStandings(supabase, profileRows)
+    await buildPlayerStandings(
+      supabase,
+      profileRows,
+      poolPredictions.map((p) => ({
+        user_id: p.user_id,
+        points_won: p.points_won,
+      }))
+    )
   );
 
   const { data: finishedMatches } = await supabase
@@ -133,7 +147,7 @@ export default async function GroupDetailPage({
     previousMatchPoints[id] = 0;
   });
 
-  predictionsData?.forEach((p) => {
+  poolPredictions.forEach((p) => {
     if (previousMatchPoints[p.user_id] !== undefined) {
       if (
         p.match_id !== lastMatchId &&
@@ -212,14 +226,11 @@ export default async function GroupDetailPage({
       .select("*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)")
       .not("result_a", "is", null)
       .order("start_time", { ascending: true });
-    const { data: hPreds } = await supabase
-      .from("predictions")
-      .select("*")
-      .eq("user_id", viewUserId);
+    const hPreds = poolPredictions.filter((p) => p.user_id === viewUserId);
     let cumulative = 0;
     userHistory = (hMatches || [])
       .map((m) => {
-        const p = hPreds?.find((pr) => pr.match_id === m.id);
+        const p = hPreds.find((pr) => pr.match_id === m.id);
         const pts = p?.points_won || 0;
         cumulative += pts;
         const breakdown =
@@ -335,6 +346,43 @@ export default async function GroupDetailPage({
   }
 
   const listParams = { group: selectedGroup, stage: selectedStage };
+
+  const poolMembers = (profilesData ?? []).map((p) => ({
+    id: p.id,
+    nickname: p.nickname || "Usuario",
+  }));
+
+  let phaseCompleteByUser: Record<string, boolean> = {};
+  const allMatchesForPhase = [
+    ...((allGroupMatches ?? []) as Match[]),
+    ...((allKnockoutMatches ?? []) as Match[]),
+  ];
+
+  if (view === "groups") {
+    const ctx: PhaseContext = { view: "groups", groupId: selectedGroup };
+    const phaseMatchIds = getPhaseMatchIds(allMatchesForPhase, ctx);
+    const phaseMatches = allMatchesForPhase.filter((m) =>
+      phaseMatchIds.includes(m.id)
+    );
+    phaseCompleteByUser = buildPhaseCompletionByUser(
+      memberIds,
+      poolPredictions,
+      phaseMatchIds,
+      phaseMatches
+    );
+  } else if (view === "knockout") {
+    const ctx: PhaseContext = { view: "knockout", stage: selectedStage };
+    const phaseMatchIds = getPhaseMatchIds(allMatchesForPhase, ctx);
+    const phaseMatches = allMatchesForPhase.filter((m) =>
+      phaseMatchIds.includes(m.id)
+    );
+    phaseCompleteByUser = buildPhaseCompletionByUser(
+      memberIds,
+      poolPredictions,
+      phaseMatchIds,
+      phaseMatches
+    );
+  }
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
@@ -461,13 +509,25 @@ export default async function GroupDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-4 space-y-8">
             <div className="sticky top-24">
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-6 flex items-center gap-3">
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-2 flex items-center gap-3">
                 <span className="flex items-center gap-2 shrink-0">
                   Ranking
                   <ScoringRulesButton size="sm" />
                 </span>
                 <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900" />
               </h2>
+              {(view === "groups" || view === "knockout") && (
+                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    Fase completa
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    Pendiente
+                  </span>
+                </p>
+              )}
               <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
@@ -503,6 +563,20 @@ export default async function GroupDetailPage({
                               </div>
                             </div>
                             <div className="flex-1 flex items-center gap-3 min-w-0">
+                              {(view === "groups" || view === "knockout") && (
+                                <span
+                                  className={`w-2 h-2 rounded-full shrink-0 ${
+                                    phaseCompleteByUser[member.id]
+                                      ? "bg-green-500"
+                                      : "bg-orange-500"
+                                  }`}
+                                  title={
+                                    phaseCompleteByUser[member.id]
+                                      ? "Fase completa"
+                                      : "Fase incompleta"
+                                  }
+                                />
+                              )}
                               <MemberBadge
                                 flagUrl={member.flagUrl}
                                 nickname={member.nickname}
@@ -623,6 +697,8 @@ export default async function GroupDetailPage({
                       userId={user.id}
                       initialPrediction={prediction}
                       poolId={poolId}
+                      poolMembers={poolMembers}
+                      phaseCompleteByUser={phaseCompleteByUser}
                     />
                   );
                 })}

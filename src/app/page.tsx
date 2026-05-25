@@ -12,7 +12,12 @@ import KnockoutStageBoard from "@/components/knockout/KnockoutStageBoard";
 import { KnockoutMatchViewModel } from "@/types/knockout";
 import { Suspense } from "react";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
+import ThirdPlaceRulesButton from "@/components/ThirdPlaceRulesButton";
 import { getUserGlobalRankStats } from "@/lib/global-ranking";
+import {
+  buildBestThirdPlacesView,
+  EMPTY_BEST_THIRDS_VIEW,
+} from "@/lib/best-thirds-view";
 
 export default async function Home({
   searchParams,
@@ -146,6 +151,23 @@ export default async function Home({
   const completedGroupsCount = allGroupMatches
     ? getCompletedGroups(allGroupMatches as Match[], predictions).size
     : 0;
+
+  let bestThirdsPredicted = EMPTY_BEST_THIRDS_VIEW;
+  let bestThirdsReal = EMPTY_BEST_THIRDS_VIEW;
+  if (allGroupMatches && allTeams) {
+    bestThirdsPredicted = buildBestThirdPlacesView(
+      allGroupMatches as Match[],
+      predictions,
+      allTeams as Team[],
+      "predicted"
+    );
+    bestThirdsReal = buildBestThirdPlacesView(
+      allGroupMatches as Match[],
+      predictions,
+      allTeams as Team[],
+      "real"
+    );
+  }
 
   // --- KNOCKOUT STAGE-BY-STAGE COMPLETION ---
   // Each stage requires all matches of the previous stage to be predicted.
@@ -337,13 +359,19 @@ export default async function Home({
               ))}
             </div>
             <RandomizeButton allGroups compact />
+            <ThirdPlaceRulesButton
+              predicted={bestThirdsPredicted}
+              real={bestThirdsReal}
+              size="sm"
+            />
           </div>
         )}
 
         {view === 'knockout' && (
           <>
-            <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar shadow-sm mb-6">
-              <div className="flex gap-2 min-w-max">
+            <div className="flex items-center gap-3 mb-6 flex-wrap">
+              <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:flex-1 sm:min-w-0 overflow-x-auto no-scrollbar shadow-sm">
+                <div className="flex gap-2 min-w-max">
                 {[
                   { id: 'round_32', label: 'Dieciseisavos' },
                   { id: 'round_16', label: 'Octavos' },
@@ -363,7 +391,13 @@ export default async function Home({
                     {s.label}
                   </Link>
                 ))}
+                </div>
               </div>
+              <ThirdPlaceRulesButton
+                predicted={bestThirdsPredicted}
+                real={bestThirdsReal}
+                size="sm"
+              />
             </div>
             {!allGroupsComplete && (
               <div className="mb-6 px-4 py-3 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
