@@ -448,12 +448,6 @@ export default async function Home({
                 <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-300">No hay partidos para mostrar</p>
               </div>
             )
-          ) : matches && matches.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {matches.map((match) => (
-                <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
-              ))}
-            </div>
           ) : null}
         </section>
       </div>
