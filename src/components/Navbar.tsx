@@ -2,17 +2,28 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import NavbarLinks from "./NavbarLinks";
 import MobileNavbarLinks from "./MobileNavbarLinks";
+import UserMenu from "./UserMenu";
+import { fetchProfileFields, getFavoriteTeamFlagUrl } from "@/lib/profile";
+
+export const dynamic = "force-dynamic";
 
 export default async function Navbar() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  let displayName = user?.email?.split('@')[0];
-  let avatarUrl = null;
+  let initialNickname: string | null = null;
+  let initialFlagUrl: string | null = null;
   if (user?.id) {
-    const { data: profile } = await supabase.from('profiles').select('nickname, avatar_url').eq('id', user.id).single();
-    if (profile?.nickname) displayName = profile.nickname;
-    if (profile?.avatar_url) avatarUrl = profile.avatar_url;
+    try {
+      const fields = await fetchProfileFields(supabase, user.id);
+      initialNickname =
+        fields?.nickname ||
+        (user.user_metadata?.nickname as string | undefined) ||
+        null;
+      initialFlagUrl = getFavoriteTeamFlagUrl(fields?.favoriteTeam ?? null, 40);
+    } catch {
+      initialNickname = (user.user_metadata?.nickname as string | undefined) || null;
+    }
   }
 
   return (
@@ -31,23 +42,12 @@ export default async function Navbar() {
           {user && <NavbarLinks />}
           
           {user ? (
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link href="/profile" className="flex items-center gap-3 bg-gray-50 dark:bg-zinc-900 p-1 rounded-full border border-gray-100 dark:border-zinc-800 shadow-sm pl-4 pr-2 hover:border-blue-500 transition-all group">
-                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter group-hover:text-blue-600">{displayName}</span>
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shadow-inner uppercase overflow-hidden">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt={displayName || 'avatar'} className="w-full h-full object-cover" />
-                  ) : (
-                    displayName?.substring(0, 1)
-                  )}
-                </div>
-              </Link>
-              <form action="/auth/signout" method="post">
-                <button title="Cerrar Sesión" className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-full transition-all">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                </button>
-              </form>
-            </div>
+            <UserMenu
+              userId={user.id}
+              email={user.email}
+              initialNickname={initialNickname}
+              initialFlagUrl={initialFlagUrl}
+            />
           ) : (
             <Link href="/login" className="bg-zinc-900 dark:bg-white text-white dark:text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-black/10">
               Entrar

@@ -6,10 +6,14 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { calculateStandings } from "@/lib/standings";
-import { resolveKnockoutTeams } from "@/lib/knockout";
+import { buildKnockoutViewModels, getCompletedGroups, resolveKnockoutTeams } from "@/lib/knockout";
 import HomeTabsHandler from "@/components/HomeTabsHandler";
-import Bracket from "@/components/Bracket";
+import KnockoutStageBoard from "@/components/knockout/KnockoutStageBoard";
+import { KnockoutMatchViewModel } from "@/types/knockout";
 import { Suspense } from "react";
+import ScoringRulesButton from "@/components/ScoringRulesButton";
+import { getFavoriteBonusForUser, getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
+import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
 
 export default async function Home({
   searchParams,
@@ -97,29 +101,63 @@ export default async function Home({
   // --- ORIGINAL DASHBOARD LOGIC (For Logged Users) ---
   const view = resolvedSearchParams.view || "groups";
   const selectedGroup = resolvedSearchParams.group || "A";
-  const selectedStage = resolvedSearchParams.stage || "round_32";
+  const rawStage = resolvedSearchParams.stage || "round_32";
+  const selectedStage = rawStage === "bracket" ? "round_32" : rawStage;
 
   const { data: allMatchesSummary } = await supabase.from("matches").select("id, group_id, stage").eq('is_finished', false);
 
   let predictions: Prediction[] = [];
-  let userStats = { points: 0, rank: 0 };
+  let userStats = { points: 0, rank: 0, bonusPoints: 0 };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("favorite_team_id")
+    .eq("id", user.id)
+    .maybeSingle();
 
   const { data: userPreds } = await supabase.from("predictions").select("*").eq("user_id", user.id);
-  if (userPreds) {
-    predictions = userPreds;
-    userStats.points = userPreds.reduce((acc, curr) => acc + (curr.points_won || 0), 0);
-  }
-  const { data: allPoints } = await supabase.from('predictions').select('user_id, points_won');
+  const matchPoints = userPreds
+    ? userPreds.reduce((acc, curr) => acc + (curr.points_won || 0), 0)
+    : 0;
+  if (userPreds) predictions = userPreds;
+
+  const favoriteBonus = await getFavoriteBonusForUser(
+    supabase,
+    user.id,
+    profile?.favorite_team_id
+  );
+  userStats.bonusPoints = favoriteBonus.total;
+  userStats.points = getTotalPointsWithFavoriteBonus(matchPoints, favoriteBonus);
+
+  const { data: allPoints } = await supabase.from("predictions").select("user_id, points_won");
+  const { data: allProfiles } = await supabase.from("profiles").select("id, favorite_team_id");
   if (allPoints) {
     const globalScores: Record<string, number> = {};
-    allPoints.forEach(p => {
+    allPoints.forEach((p) => {
       globalScores[p.user_id] = (globalScores[p.user_id] || 0) + (p.points_won || 0);
     });
-    const sortedScores = Object.values(globalScores).sort((a, b) => b - a);
-    userStats.rank = sortedScores.indexOf(userStats.points) + 1;
+    const favoriteBonuses = await getFavoriteBonusesForUsers(
+      supabase,
+      (allProfiles || []).map((p) => ({
+        id: p.id,
+        favorite_team_id: p.favorite_team_id,
+      }))
+    );
+    const sortedTotals = Object.keys(globalScores)
+      .map((uid) =>
+        getTotalPointsWithFavoriteBonus(
+          globalScores[uid],
+          favoriteBonuses[uid] ?? { total: 0, awards: [] }
+        )
+      )
+      .sort((a, b) => b - a);
+    userStats.rank = sortedTotals.indexOf(userStats.points) + 1;
   }
 
   const groupCompletion: Record<string, boolean> = {};
+  const allGroups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+  allGroups.forEach(gid => groupCompletion[gid] = false);
+
   if (allMatchesSummary) {
     const groupMap: Record<string, { total: number, predicted: number }> = {};
     allMatchesSummary.forEach(m => {
@@ -135,13 +173,51 @@ export default async function Home({
     });
   }
 
+  const incompleteGroups = allGroups.filter(gid => !groupCompletion[gid]);
+  const allGroupsComplete = incompleteGroups.length === 0;
+
   // --- FETCH DATA FOR RESOLUTION ---
   const { data: allTeams } = await supabase.from("teams").select("*");
   const { data: allGroupMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").eq("stage", "group");
   const { data: allKnockoutMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").neq("stage", "group");
 
-  const isBracketView = selectedStage === 'bracket';
+  const completedGroupsCount = allGroupMatches
+    ? getCompletedGroups(allGroupMatches as Match[], predictions).size
+    : 0;
+
+  // --- KNOCKOUT STAGE-BY-STAGE COMPLETION ---
+  // Each stage requires all matches of the previous stage to be predicted.
+  const knockoutStageOrder = ['round_32', 'round_16', 'quarter_final', 'semi_final', 'final'];
+  const knockoutStageLabels: Record<string, string> = {
+    round_32: 'Dieciseisavos',
+    round_16: 'Octavos',
+    quarter_final: 'Cuartos',
+    semi_final: 'Semis',
+    final: 'Final',
+  };
+  // Whether ALL matches in each stage have a prediction (or are already finished)
+  const knockoutStageComplete: Record<string, boolean> = {};
+  if (allGroupsComplete && allKnockoutMatches) {
+    knockoutStageOrder.forEach(stage => {
+      const stageMatches = (allKnockoutMatches as Match[]).filter(m => m.stage === stage);
+      knockoutStageComplete[stage] = stageMatches.length > 0 &&
+        stageMatches.every(m => m.is_finished || predictions.some(p => p.match_id === m.id));
+    });
+  }
+  // Is the currently selected stage accessible?
+  const selectedStageIdx = knockoutStageOrder.indexOf(selectedStage);
+  const isSelectedStageAccessible = true;
+  // Previous stage info for the "locked" empty state
+  const prevStageName = selectedStageIdx > 0 ? knockoutStageOrder[selectedStageIdx - 1] : null;
+  const incompletePrevStageCount =
+    prevStageName && allKnockoutMatches
+      ? (allKnockoutMatches as Match[]).filter(
+          m => m.stage === prevStageName && !m.is_finished && !predictions.some(p => p.match_id === m.id)
+        ).length
+      : 0;
+
   let matches: Match[] = [];
+  let knockoutViewModels: KnockoutMatchViewModel[] = [];
 
   if (view === "today") {
     const { data } = await supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`).eq("is_finished", false).order("start_time", { ascending: true }).limit(12);
@@ -152,16 +228,33 @@ export default async function Home({
   } else if (view === "groups") {
     const { data } = await supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`).eq("group_id", selectedGroup).eq("stage", "group").order("start_time", { ascending: true });
     matches = (data || []) as Match[];
-  } else if (view === "knockout") {
-    if (allKnockoutMatches && allGroupMatches && allTeams) {
-      const allResolved = resolveKnockoutTeams(allKnockoutMatches as Match[], allGroupMatches as Match[], predictions, allTeams as Team[]);
-      
-      if (isBracketView) {
-        matches = allResolved;
-      } else {
-        matches = allResolved.filter(m => m.stage === selectedStage).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-      }
-    }
+  } else if (view === "knockout" && allKnockoutMatches && allGroupMatches && allTeams) {
+    const allKnockoutVm = buildKnockoutViewModels(
+      allKnockoutMatches as Match[],
+      allGroupMatches as Match[],
+      predictions,
+      allTeams as Team[]
+    );
+
+    knockoutViewModels =
+      selectedStage === "final"
+        ? allKnockoutVm.filter(
+            (vm) => vm.match.stage === "final" || vm.match.stage === "third_place"
+          )
+        : allKnockoutVm
+            .filter((vm) => vm.match.stage === selectedStage)
+            .sort(
+              (a, b) =>
+                new Date(a.match.start_time).getTime() -
+                new Date(b.match.start_time).getTime()
+            );
+
+    matches = resolveKnockoutTeams(
+      allKnockoutMatches as Match[],
+      allGroupMatches as Match[],
+      predictions,
+      allTeams as Team[]
+    ) as Match[];
   }
 
   // Resolve knockout teams for Today/Results views as well
@@ -171,15 +264,19 @@ export default async function Home({
     }
   }
 
-  // Map placeholders back for labelling
-  matches = matches.map(rm => {
-    const original = (allKnockoutMatches as (Match & { team_a: Team, team_b: Team })[] || []).find(o => o.id === rm.id);
-    return {
-      ...rm,
-      placeholder_a: original?.team_a?.iso_code,
-      placeholder_b: original?.team_b?.iso_code
-    };
-  });
+  // Map placeholders back for labelling (solo eliminatorias)
+  if (view !== "groups") {
+    matches = matches.map((rm) => {
+      const original = (allKnockoutMatches as (Match & { team_a: Team; team_b: Team })[] || []).find(
+        (o) => o.id === rm.id
+      );
+      return {
+        ...rm,
+        placeholder_a: original?.team_a?.iso_code,
+        placeholder_b: original?.team_b?.iso_code,
+      };
+    });
+  }
 
   let groupTeams: Team[] = [];
   let standings: any[] = [];
@@ -237,7 +334,10 @@ export default async function Home({
 
           <div className="bg-white dark:bg-zinc-900 px-4 sm:px-6 py-4 rounded-[2rem] shadow-xl border border-gray-100 dark:border-zinc-800 flex items-center justify-around sm:justify-start gap-4 sm:gap-6">
             <div className="text-center">
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Tu Puntuación</span>
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1 inline-flex items-center justify-center gap-1.5">
+                Tu Puntuación
+                <ScoringRulesButton size="sm" />
+              </span>
               <span className="text-2xl font-black text-blue-600 leading-none">{userStats.points}</span>
             </div>
             <div className="w-px h-8 bg-gray-100 dark:bg-zinc-800"></div>
@@ -248,18 +348,16 @@ export default async function Home({
           </div>
         </header>
 
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-10 overflow-hidden">
-          <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar shadow-sm">
-            <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
-            <Link href="/?view=knockout" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Eliminatorias</Link>
-            <Link href="/?view=today" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
-            <Link href="/?view=results" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
-          </div>
+        <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full lg:w-fit overflow-x-auto no-scrollbar shadow-sm mb-10">
+          <Link href={`/?view=groups&group=${selectedGroup}`} className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
+          <Link href="/?view=knockout" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'knockout' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Eliminatorias</Link>
+          <Link href="/?view=today" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
+          <Link href="/?view=results" className={`px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${view === 'results' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Resultados</Link>
         </div>
 
         {view === 'groups' && (
-          <div className="flex flex-col sm:flex-row items-center gap-4 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2 mb-10">
-            <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-center sm:justify-start animate-in fade-in slide-in-from-top-2 mb-10">
+            <div className="grid grid-cols-6 sm:flex sm:flex-wrap gap-2">
               {groups.map(g => (
                 <Link key={g} href={`/?view=groups&group=${g}`} className={`relative w-full aspect-square sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>
                   {g}
@@ -268,6 +366,7 @@ export default async function Home({
                 </Link>
               ))}
             </div>
+            <RandomizeButton allGroups compact />
           </div>
         )}
 
@@ -281,22 +380,41 @@ export default async function Home({
                   { id: 'quarter_final', label: 'Cuartos' },
                   { id: 'semi_final', label: 'Semis' },
                   { id: 'final', label: 'Final' },
-                  { id: 'bracket', label: 'Árbol' }
                 ].map(s => (
-                  <Link 
-                    key={s.id} 
-                    href={`/?view=knockout&stage=${s.id}`} 
-                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedStage === s.id ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md' : 'text-gray-400'}`}
+                  <Link
+                    key={s.id}
+                    href={`/?view=knockout&stage=${s.id}`}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                      selectedStage === s.id
+                        ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md'
+                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300'
+                    }`}
                   >
                     {s.label}
                   </Link>
                 ))}
               </div>
             </div>
-            {!isBracketView && (
-              <div className="flex justify-end mb-6 animate-in fade-in slide-in-from-right-4">
-                <RandomizeButton stage={selectedStage} />
+            {!allGroupsComplete && (
+              <div className="mb-6 px-4 py-3 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
+                <p className="text-[9px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-widest leading-relaxed">
+                  {completedGroupsCount > 0
+                    ? `${completedGroupsCount} grupo${completedGroupsCount !== 1 ? "s" : ""} ya rellenan equipos en eliminatorias. `
+                    : "Los cruces usan placeholders hasta que predigas los grupos. "}
+                  Faltan {incompleteGroups.length} para completar todos los cruces y mejores terceros.
+                </p>
+                <Link
+                  href={`/?view=groups&group=${incompleteGroups[0] ?? "A"}`}
+                  className="inline-block mt-2 text-[9px] font-black text-orange-600 uppercase tracking-widest hover:underline"
+                >
+                  Ir a grupos →
+                </Link>
               </div>
+            )}
+            {allGroupsComplete && prevStageName && !knockoutStageComplete[prevStageName] && selectedStageIdx > 0 && (
+              <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-6 px-2">
+                Aún no has predicho todos los partidos de {knockoutStageLabels[prevStageName]} — puedes ver las siguientes fases igualmente
+              </p>
             )}
           </>
         )}
@@ -304,26 +422,45 @@ export default async function Home({
         <section className="space-y-10">
           {view === "groups" && (
             <div className="animate-in fade-in zoom-in duration-500">
-              <div className="flex justify-between items-center mb-6 bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800">
-                <div>
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 italic">Clasificación Grupo {selectedGroup}</h2>
-                  <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Basado en tus predicciones actuales</p>
-                </div>
-                <RandomizeButton groupId={selectedGroup} />
+              <div className="mb-6 bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800">
+                <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 italic">Clasificación Grupo {selectedGroup}</h2>
+                <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Basado en tus predicciones actuales</p>
               </div>
-              {standings.length > 0 ? (
+              {groupTeams.length > 0 ? (
                 <GroupStandings stats={standings} predictedStats={predictedStandings} />
               ) : (
-                <div className="bg-gray-50 dark:bg-zinc-900/50 p-8 rounded-[2rem] text-center border border-dashed border-gray-200 dark:border-zinc-800">
+                <div className="bg-gray-50 dark:bg-zinc-900/50 p-8 rounded-[2rem] text-center border border-dashed border-gray-200 dark:border-zinc-800 mb-6">
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">No hay partidos configurados para el Grupo {selectedGroup}</p>
                 </div>
               )}
+              {matches.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                  {matches.map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      userId={user.id}
+                      initialPrediction={predictions.find((p) => p.match_id === match.id)}
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
-          {isBracketView ? (
+          {view === "knockout" && knockoutViewModels.length > 0 ? (
             <div className="animate-in fade-in zoom-in duration-500">
-              <Bracket matches={matches} />
+              <KnockoutStageBoard
+                viewModels={knockoutViewModels}
+                userId={user.id}
+                stageLabel={knockoutStageLabels[selectedStage] ?? selectedStage}
+              />
+            </div>
+          ) : view === "knockout" ? (
+            <div className="py-20 text-center">
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-300">
+                No hay partidos de eliminatorias configurados. Ejecuta knockout_structure.sql en Supabase.
+              </p>
             </div>
           ) : (view === "today" || view === "results") ? (
             Object.entries(groupedMatches).length > 0 ? (
@@ -350,10 +487,6 @@ export default async function Home({
               {matches.map((match) => (
                 <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
               ))}
-            </div>
-          ) : view === "knockout" ? (
-            <div className="py-20 text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-300">Selecciona una fase de eliminatorias</p>
             </div>
           ) : null}
         </section>

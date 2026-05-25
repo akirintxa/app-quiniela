@@ -5,6 +5,16 @@ import { redirect } from "next/navigation";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import RankingTabsHandler from "@/components/RankingTabsHandler";
 import ShareRankingButton from "@/components/ShareRankingButton";
+import MemberBadge from "@/components/MemberBadge";
+import ScoringRulesButton from "@/components/ScoringRulesButton";
+import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
+import { getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
+import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
+import {
+  formatPointsBreakdown,
+  getPointsBreakdown,
+} from "@/lib/points";
+import { Match, Prediction } from "@/types";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
@@ -43,9 +53,14 @@ export default async function RankingPage({
     // 1. Obtener todos los perfiles registrados con su equipo favorito (iso_code)
     const { data: profiles, error: pError } = await supabase
       .from('profiles')
-      .select('id, nickname, avatar_url, favorite_team_id, teams:favorite_team_id (iso_code)');
-    
+      .select('id, nickname, favorite_team_id');
+
     if (pError) console.error("Error fetching profiles:", pError);
+
+    const favoriteIds =
+      profiles?.map((p) => p.favorite_team_id).filter((id): id is number => id != null) ||
+      [];
+    const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteIds);
 
     if (profiles) {
       let filteredProfiles = profiles;
@@ -60,6 +75,14 @@ export default async function RankingPage({
       }
 
       const targetIds = filteredProfiles.map(p => p.id);
+
+      const favoriteBonuses = await getFavoriteBonusesForUsers(
+        supabase,
+        filteredProfiles.map((p) => ({
+          id: p.id,
+          favorite_team_id: p.favorite_team_id,
+        }))
+      );
 
       // 3. Obtener puntos acumulados de forma segura
       const { data: predictionsData } = await supabase
@@ -94,14 +117,19 @@ export default async function RankingPage({
           if (curPos < prePos) trend = 'up';
           else if (curPos > prePos) trend = 'down';
         }
-        userMap[p.id] = { 
-          id: p.id, 
-          nickname: p.nickname || 'Usuario', 
-          avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, 
-          flag: (p.teams as any)?.iso_code,
-          points: currentScores[p.id] || 0, 
-          trend, 
-          isMe: p.id === user.id 
+        const favTeam = p.favorite_team_id ? teamsById.get(p.favorite_team_id) : null;
+        const matchPts = currentScores[p.id] || 0;
+        const bonus = favoriteBonuses[p.id]?.total ?? 0;
+        userMap[p.id] = {
+          id: p.id,
+          nickname: p.nickname || 'Usuario',
+          flagUrl: getFavoriteTeamFlagUrl(favTeam ?? null, 40),
+          matchPoints: matchPts,
+          bonusPoints: bonus,
+          points: getTotalPointsWithFavoriteBonus(matchPts, favoriteBonuses[p.id] ?? { total: 0, awards: [] }),
+          bonusAwards: favoriteBonuses[p.id]?.awards ?? [],
+          trend,
+          isMe: p.id === user.id,
         };
       });
 
@@ -139,25 +167,38 @@ export default async function RankingPage({
   let userHistory: any[] = [];
   let historyProfile = (viewUserId && userMap[viewUserId]) ? userMap[viewUserId] : null;
   if (viewUserId && historyProfile) {
-    const { data: matches } = await supabase.from('matches').select('*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)').not('result_a', 'is', null).order('start_time', { ascending: true });
-    const { data: preds } = await supabase.from('predictions').select('*').eq('user_id', viewUserId);
+    const { data: matches } = await supabase
+      .from('matches')
+      .select('*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
+      .not('result_a', 'is', null)
+      .order('start_time', { ascending: true });
+    const { data: preds } = await supabase
+      .from('predictions')
+      .select('*')
+      .eq('user_id', viewUserId);
     let cumulative = 0;
-    userHistory = (matches || []).map(m => {
-      const p = preds?.find(pr => pr.match_id === m.id);
-      const pts = p?.points_won || 0;
-      cumulative += pts;
-      return { match: `${(m.team_a as any).name.substring(0,3).toUpperCase()} vs ${(m.team_b as any).name.substring(0,3).toUpperCase()}`, pred: p ? `${p.predicted_a}-${p.predicted_b}` : '-', res: `${m.result_a}-${m.result_b}`, pts, total: cumulative };
-    }).reverse();
+    userHistory = (matches || [])
+      .map((m) => {
+        const p = preds?.find((pr) => pr.match_id === m.id);
+        const pts = p?.points_won || 0;
+        cumulative += pts;
+        const breakdown =
+          p && m.result_a != null
+            ? formatPointsBreakdown(
+                getPointsBreakdown(p as Prediction, m as Match)
+              )
+            : '';
+        return {
+          match: `${(m.team_a as { name: string }).name.substring(0, 3).toUpperCase()} vs ${(m.team_b as { name: string }).name.substring(0, 3).toUpperCase()}`,
+          pred: p ? `${p.predicted_a}-${p.predicted_b}` : '-',
+          res: `${m.result_a}-${m.result_b}`,
+          pts,
+          breakdown,
+          total: cumulative,
+        };
+      })
+      .reverse();
   }
-
-  const getFlagUrl = (iso: string) => {
-    if (!iso) return null;
-    const cleanIso = iso.toLowerCase();
-    const special: Record<string, string> = { 'gb-sct': 'gb-sct', 'gb-eng': 'gb-eng', 'gb-wls': 'gb-wls' };
-    if (special[cleanIso]) return `https://flagcdn.com/w40/${special[cleanIso]}.png`;
-    if (cleanIso.length !== 2) return null;
-    return `https://flagcdn.com/w40/${cleanIso}.png`;
-  };
 
   return (
     <div className="py-10 px-4 sm:px-6 lg:px-8 font-sans">
@@ -169,8 +210,19 @@ export default async function RankingPage({
           <div className="bg-white dark:bg-zinc-900 w-full max-w-xl max-h-[85vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-gray-100 dark:border-zinc-800">
             <div className="p-6 sm:p-8 border-b border-gray-50 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
               <div className="flex items-center gap-4">
-                <img src={historyProfile.avatar} alt="av" className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-blue-500 shadow-lg" />
-                <div><h3 className="font-black text-xl uppercase tracking-tighter">{historyProfile.nickname}</h3><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Resumen de Jornadas</p></div>
+                <MemberBadge
+                  flagUrl={historyProfile.flagUrl}
+                  nickname={historyProfile.nickname}
+                  size="md"
+                />
+                <div>
+                  <h3 className="font-black text-xl uppercase tracking-tighter">
+                    {historyProfile.nickname}
+                  </h3>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                    Resumen de partidos
+                  </p>
+                </div>
               </div>
               <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}&view=players` : '/ranking?pool=all&view=players'} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -180,8 +232,37 @@ export default async function RankingPage({
               <div className="space-y-3">
                 {userHistory.map((h, i) => (
                   <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/50">
-                    <div className="flex flex-col"><span className="text-[10px] font-black uppercase text-gray-400 mb-1">{h.match}</span><div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-500 italic">Pred: <span className="text-gray-900 dark:text-white not-italic">{h.pred}</span></span><span className="w-px h-3 bg-gray-200"></span><span className="text-xs font-bold text-gray-500 italic">Res: <span className="text-blue-600 not-italic">{h.res}</span></span></div></div>
-                    <div className="text-right"><div className="font-black text-lg tracking-tighter leading-none">{h.total} <span className="text-[10px] text-gray-400">PTS</span></div><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${h.pts > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>+{h.pts}</span></div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] font-black uppercase text-gray-400 mb-1">{h.match}</span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs font-bold text-gray-500 italic">
+                          Pred: <span className="text-gray-900 dark:text-white not-italic">{h.pred}</span>
+                        </span>
+                        <span className="w-px h-3 bg-gray-200" />
+                        <span className="text-xs font-bold text-gray-500 italic">
+                          Res: <span className="text-blue-600 not-italic">{h.res}</span>
+                        </span>
+                      </div>
+                      {h.breakdown && (
+                        <span className="text-[8px] font-bold text-gray-400 uppercase mt-1 tracking-wider">
+                          {h.breakdown}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-black text-lg tracking-tighter leading-none">
+                        {h.total} <span className="text-[10px] text-gray-400">PTS</span>
+                      </div>
+                      <span
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          h.pts > 0
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        +{h.pts}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -218,22 +299,18 @@ export default async function RankingPage({
 
         {currentView === 'players' ? (
           <>
-            <div className="mb-8 grid grid-cols-3 gap-2">
-              {[['+2', 'Ganador'], ['+1', 'Dif.'], ['+1', 'Goles']].map(([v, t], idx) => (
-                <div key={idx} className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-gray-100 dark:border-zinc-800 text-center shadow-sm">
-                  <span className="text-xs font-black text-blue-600 block">{v}</span>
-                  <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{t}</span>
-                </div>
-              ))}
-            </div>
-
             <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-zinc-800/50">
                     <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 w-16 text-center">Pos</th>
                     <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400">Jugador</th>
-                    <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 text-right">Pts</th>
+                    <th className="px-6 py-4 text-[9px] font-black uppercase text-gray-400 text-right">
+                      <span className="inline-flex items-center justify-end gap-2">
+                        Pts
+                        <ScoringRulesButton size="sm" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
@@ -249,11 +326,30 @@ export default async function RankingPage({
                               {member.trend === 'same' && <span className="w-1 h-1 bg-gray-300 rounded-full"></span>}
                             </div>
                           </div>
-                          <div className="flex-1 flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-2xl overflow-hidden border-2 ${member.isMe ? 'border-white/30' : 'border-gray-100'}`}><img src={member.avatar} alt="av" className="w-full h-full object-cover" /></div>
-                            <div className="flex flex-col"><div className="flex items-center gap-2"><span className="font-black text-sm uppercase tracking-tighter">{member.nickname}</span>{member.flag && <img src={getFlagUrl(member.flag) || ""} alt="f" className="w-4 h-3 rounded-[2px] shadow-sm" />}</div><span className={`text-[8px] font-black uppercase tracking-widest ${member.isMe ? 'opacity-60' : 'text-gray-400 group-hover:text-blue-500'}`}>Ver Historial</span></div>
+                          <div className="flex-1 flex items-center gap-4 min-w-0">
+                            <MemberBadge
+                              flagUrl={member.flagUrl}
+                              nickname={member.nickname}
+                              inverted={member.isMe}
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-black text-sm uppercase tracking-tighter truncate">
+                                {member.nickname}
+                              </span>
+                              <span
+                                className={`text-[8px] font-black uppercase tracking-widest ${
+                                  member.isMe
+                                    ? 'opacity-60'
+                                    : 'text-gray-400 group-hover:text-blue-500'
+                                }`}
+                              >
+                                Ver historial
+                              </span>
+                            </div>
                           </div>
-                          <div className="px-6 text-right font-black text-xl tracking-tighter">{member.points}</div>
+                          <div className="px-6 text-right shrink-0 font-black text-xl tracking-tighter">
+                            {member.points}
+                          </div>
                         </Link>
                       </td>
                     </tr>

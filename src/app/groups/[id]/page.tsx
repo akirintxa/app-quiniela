@@ -1,177 +1,423 @@
 import { createClient } from "@/utils/supabase/server";
-import { Match, Prediction } from "@/types";
+import { Match, Prediction, Team } from "@/types";
 import MatchCard from "@/components/MatchCard";
 import GroupStandings from "@/components/GroupStandings";
+import MemberBadge from "@/components/MemberBadge";
+import ScoringRulesButton from "@/components/ScoringRulesButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import DeletePoolButton from "@/components/DeletePoolButton";
+import { calculateStandings } from "@/lib/standings";
+import { resolveKnockoutTeams } from "@/lib/knockout";
+import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
+import { getFavoriteBonusesForUsers } from "@/lib/favorite-bonus-server";
+import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
+import { formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+
+const GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
+const KNOCKOUT_STAGES = [
+  "round_32",
+  "round_16",
+  "quarter_final",
+  "semi_final",
+  "final",
+] as const;
+
+const KNOCKOUT_LABELS: Record<string, string> = {
+  round_32: "Dieciseisavos",
+  round_16: "Octavos",
+  quarter_final: "Cuartos",
+  semi_final: "Semis",
+  final: "Final",
+};
+
+function poolHref(
+  poolId: string,
+  params: {
+    view?: string;
+    group?: string;
+    stage?: string;
+    view_user?: string;
+  }
+) {
+  const q = new URLSearchParams();
+  if (params.view) q.set("view", params.view);
+  if (params.group) q.set("group", params.group);
+  if (params.stage) q.set("stage", params.stage);
+  if (params.view_user) q.set("view_user", params.view_user);
+  const s = q.toString();
+  return `/groups/${poolId}${s ? `?${s}` : ""}`;
+}
 
 export default async function GroupDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ group?: string; view?: string; view_user?: string }>;
+  searchParams: Promise<{ group?: string; view?: string; stage?: string; view_user?: string }>;
 }) {
   const supabase = await createClient();
   const { id: poolId } = await params;
   const resolvedSearchParams = await searchParams;
-  const selectedGroup = resolvedSearchParams.group || "A";
   const view = resolvedSearchParams.view || "groups";
+  const selectedGroup = resolvedSearchParams.group || "A";
+  const selectedStage = resolvedSearchParams.stage || "round_32";
   const viewUserId = resolvedSearchParams.view_user;
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
-  const { data: pool, error: poolError } = await supabase.from('pools').select('*').eq('id', poolId).single();
+  const { data: pool, error: poolError } = await supabase
+    .from("pools")
+    .select("*")
+    .eq("id", poolId)
+    .single();
   if (poolError || !pool) notFound();
 
-  const { data: membership } = await supabase.from('pool_members').select('*').eq('pool_id', poolId).eq('user_id', user.id).single();
-  if (!membership) redirect('/groups?error=not-a-member');
+  const { data: membership } = await supabase
+    .from("pool_members")
+    .select("*")
+    .eq("pool_id", poolId)
+    .eq("user_id", user.id)
+    .single();
+  if (!membership) redirect("/groups?error=not-a-member");
 
-  // Permissions
   const isCreator = pool.creator_id === user.id;
 
-  // 1. Fetch Members & Profiles (Fuente de Verdad)
-  const { data: membersData } = await supabase.from('pool_members').select('user_id').eq('pool_id', poolId);
-  const memberIds = membersData?.map(m => m.user_id) || [];
-  
-  // Consulta simple de perfiles para evitar fallos por joins
+  const { data: membersData } = await supabase
+    .from("pool_members")
+    .select("user_id")
+    .eq("pool_id", poolId);
+  const memberIds = membersData?.map((m) => m.user_id) || [];
+
   const { data: profilesData } = await supabase
-    .from('profiles')
-    .select('id, nickname, avatar_url, favorite_team_id')
-    .in('id', memberIds);
+    .from("profiles")
+    .select("id, nickname, favorite_team_id")
+    .in("id", memberIds);
+
+  const favoriteTeamIds =
+    profilesData?.map((p) => p.favorite_team_id).filter((id): id is number => id != null) ||
+    [];
+  const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteTeamIds);
 
   const { data: predictionsData } = await supabase
-    .from('predictions')
-    .select('user_id, points_won, match_id')
-    .in('user_id', memberIds);
+    .from("predictions")
+    .select("user_id, points_won, match_id")
+    .in("user_id", memberIds);
 
-  // 2. Trend & Ranking Logic
-  const { data: finishedMatches } = await supabase.from('matches').select('id').eq('is_finished', true).order('start_time', { ascending: false });
+  const favoriteBonuses = await getFavoriteBonusesForUsers(
+    supabase,
+    (profilesData || []).map((p) => ({
+      id: p.id,
+      favorite_team_id: p.favorite_team_id,
+    }))
+  );
+
+  const { data: finishedMatches } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("is_finished", true)
+    .order("start_time", { ascending: false });
   const lastMatchId = finishedMatches?.[0]?.id;
 
-  const userMap: Record<string, any> = {};
   const currentScores: Record<string, number> = {};
   const previousScores: Record<string, number> = {};
-  memberIds.forEach(id => { currentScores[id] = 0; previousScores[id] = 0; });
+  memberIds.forEach((id) => {
+    currentScores[id] = 0;
+    previousScores[id] = 0;
+  });
 
-  predictionsData?.forEach(p => {
+  predictionsData?.forEach((p) => {
     if (currentScores[p.user_id] !== undefined) {
       currentScores[p.user_id] += p.points_won || 0;
-      if (p.match_id !== lastMatchId && finishedMatches?.some(m => m.id === p.match_id)) {
+      if (
+        p.match_id !== lastMatchId &&
+        finishedMatches?.some((m) => m.id === p.match_id)
+      ) {
         previousScores[p.user_id] += p.points_won || 0;
       }
     }
   });
 
-  const currentRanked = Object.keys(currentScores).map(id => ({ id, points: currentScores[id] })).sort((a, b) => b.points - a.points);
-  const previousRanked = Object.keys(previousScores).map(id => ({ id, points: previousScores[id] })).sort((a, b) => b.points - a.points);
+  const currentRanked = Object.keys(currentScores)
+    .map((id) => ({ id, points: currentScores[id] }))
+    .sort((a, b) => b.points - a.points);
+  const previousRanked = Object.keys(previousScores)
+    .map((id) => ({ id, points: previousScores[id] }))
+    .sort((a, b) => b.points - a.points);
 
-  profilesData?.forEach(p => {
-    const curPos = currentRanked.findIndex(r => r.id === p.id);
-    const prePos = previousRanked.findIndex(r => r.id === p.id);
-    let trend = 'same';
-    if (lastMatchId) {
-      if (curPos < prePos) trend = 'up';
-      else if (curPos > prePos) trend = 'down';
+  const userMap: Record<
+    string,
+    {
+      id: string;
+      nickname: string;
+      flagUrl: string | null;
+      points: number;
+      bonusPoints: number;
+      trend: string;
+      isMe: boolean;
     }
-    userMap[p.id] = { 
-      id: p.id, 
-      nickname: p.nickname || 'Usuario', 
-      avatar: p.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${p.id}`, 
-      points: currentScores[p.id] || 0, 
-      trend, 
-      isMe: p.id === user.id 
+  > = {};
+
+  profilesData?.forEach((p) => {
+    const curPos = currentRanked.findIndex((r) => r.id === p.id);
+    const prePos = previousRanked.findIndex((r) => r.id === p.id);
+    let trend = "same";
+    if (lastMatchId) {
+      if (curPos < prePos) trend = "up";
+      else if (curPos > prePos) trend = "down";
+    }
+    const favTeam = p.favorite_team_id ? teamsById.get(p.favorite_team_id) : null;
+    const matchPts = currentScores[p.id] || 0;
+    const bonus = favoriteBonuses[p.id]?.total ?? 0;
+    userMap[p.id] = {
+      id: p.id,
+      nickname: p.nickname || "Usuario",
+      flagUrl: getFavoriteTeamFlagUrl(favTeam ?? null, 40),
+      bonusPoints: bonus,
+      points: getTotalPointsWithFavoriteBonus(
+        matchPts,
+        favoriteBonuses[p.id] ?? { total: 0, awards: [] }
+      ),
+      trend,
+      isMe: p.id === user.id,
     };
   });
 
   const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
 
-  // 3. History modal
-  let userHistory: any[] = [];
-  let historyProfile = viewUserId ? userMap[viewUserId] : null;
+  let userHistory: {
+    match: string;
+    pred: string;
+    res: string;
+    pts: number;
+    breakdown: string;
+    total: number;
+  }[] = [];
+  const historyProfile = viewUserId ? userMap[viewUserId] : null;
+
   if (viewUserId && historyProfile) {
-    const { data: hMatches } = await supabase.from('matches').select('*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)').not('result_a', 'is', null).order('start_time', { ascending: true });
-    const { data: hPreds } = await supabase.from('predictions').select('*').eq('user_id', viewUserId);
+    const { data: hMatches } = await supabase
+      .from("matches")
+      .select("*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)")
+      .not("result_a", "is", null)
+      .order("start_time", { ascending: true });
+    const { data: hPreds } = await supabase
+      .from("predictions")
+      .select("*")
+      .eq("user_id", viewUserId);
     let cumulative = 0;
-    userHistory = (hMatches || []).map(m => {
-      const p = hPreds?.find(pr => pr.match_id === m.id);
-      const pts = p?.points_won || 0;
-      cumulative += pts;
-      return { match: `${(m.team_a as any).name.substring(0,3).toUpperCase()} vs ${(m.team_b as any).name.substring(0,3).toUpperCase()}`, pred: p ? `${p.predicted_a}-${p.predicted_b}` : '-', res: `${m.result_a}-${m.result_b}`, pts, total: cumulative };
-    }).reverse();
+    userHistory = (hMatches || [])
+      .map((m) => {
+        const p = hPreds?.find((pr) => pr.match_id === m.id);
+        const pts = p?.points_won || 0;
+        cumulative += pts;
+        const breakdown =
+          p && m.result_a != null
+            ? formatPointsBreakdown(
+                getPointsBreakdown(p as Prediction, m as Match)
+              )
+            : "";
+        return {
+          match: `${(m.team_a as { name: string }).name.substring(0, 3).toUpperCase()} vs ${(m.team_b as { name: string }).name.substring(0, 3).toUpperCase()}`,
+          pred: p ? `${p.predicted_a}-${p.predicted_b}` : "-",
+          res: `${m.result_a}-${m.result_b}`,
+          pts,
+          breakdown,
+          total: cumulative,
+        };
+      })
+      .reverse();
   }
 
-  // 4. Matches Logic
-  let mQuery = supabase.from("matches").select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`);
-  if (view === "today") mQuery = mQuery.order("is_finished", { ascending: true }).order("start_time", { ascending: true }).limit(20);
-  else mQuery = mQuery.eq("group_id", selectedGroup).eq("stage", "group").order("is_finished", { ascending: true }).order("start_time", { ascending: true });
-  const { data: matches } = await mQuery;
+  const { data: allTeams } = await supabase.from("teams").select("*");
+  const { data: allGroupMatches } = await supabase
+    .from("matches")
+    .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+    .eq("stage", "group");
+  const { data: allKnockoutMatches } = await supabase
+    .from("matches")
+    .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+    .neq("stage", "group");
 
-  const { data: myPredictions } = await supabase.from('predictions').select('*').eq('user_id', user.id);
-  const groups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+  const { data: myPredictions } = await supabase
+    .from("predictions")
+    .select("*")
+    .eq("user_id", user.id);
 
-  // Calculate Standings for Group View
-  let groupStandings: any[] = [];
-  let predictedStandings: any[] = [];
-  if (view === "groups" && matches) {
-    const groupTeamsMap = new Map();
-    matches.forEach(m => {
-      if (m.team_a) groupTeamsMap.set(m.team_a.id, m.team_a);
-      if (m.team_b) groupTeamsMap.set(m.team_b.id, m.team_b);
+  let matches: Match[] = [];
+
+  if (view === "today") {
+    const { data } = await supabase
+      .from("matches")
+      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+      .eq("is_finished", false)
+      .order("start_time", { ascending: true })
+      .limit(40);
+    matches = (data || []) as Match[];
+  } else if (view === "groups") {
+    const { data } = await supabase
+      .from("matches")
+      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+      .eq("group_id", selectedGroup)
+      .eq("stage", "group")
+      .order("is_finished", { ascending: true })
+      .order("start_time", { ascending: true });
+    matches = (data || []) as Match[];
+  } else if (view === "knockout") {
+    const stageFilter =
+      selectedStage === "final"
+        ? ["final", "third_place"]
+        : [selectedStage];
+    const { data } = await supabase
+      .from("matches")
+      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+      .in("stage", stageFilter)
+      .order("is_finished", { ascending: true })
+      .order("start_time", { ascending: true });
+    matches = (data || []) as Match[];
+  }
+
+  if (
+    matches.length > 0 &&
+    allKnockoutMatches &&
+    allGroupMatches &&
+    allTeams &&
+    view !== "groups"
+  ) {
+    matches = resolveKnockoutTeams(
+      matches,
+      allGroupMatches as Match[],
+      (myPredictions || []) as Prediction[],
+      allTeams as Team[]
+    );
+    const originals = allKnockoutMatches as (Match & { team_a: Team; team_b: Team })[];
+    matches = matches.map((rm) => {
+      const original = originals.find((o) => o.id === rm.id);
+      return {
+        ...rm,
+        placeholder_a: original?.team_a?.iso_code,
+        placeholder_b: original?.team_b?.iso_code,
+      };
+    });
+  }
+
+  let groupStandings: ReturnType<typeof calculateStandings> = [];
+  let predictedStandings: ReturnType<typeof calculateStandings> = [];
+
+  if (view === "groups" && matches.length > 0) {
+    const groupTeamsMap = new Map<number, Team>();
+    matches.forEach((m) => {
+      if (m.team_a) groupTeamsMap.set(m.team_a.id, m.team_a as Team);
+      if (m.team_b) groupTeamsMap.set(m.team_b.id, m.team_b as Team);
     });
     const groupTeams = Array.from(groupTeamsMap.values());
-    
-    // Real
-    const { calculateStandings } = await import("@/lib/standings");
-    groupStandings = calculateStandings(matches as Match[], groupTeams);
-
-    // Predicted
-    const simulatedMatches = matches.map(m => {
-      const pred = myPredictions?.find(p => p.match_id === m.id);
+    groupStandings = calculateStandings(matches, groupTeams);
+    const simulatedMatches = matches.map((m) => {
+      const pred = myPredictions?.find((p) => p.match_id === m.id);
       return {
         ...m,
         result_a: pred?.predicted_a ?? null,
-        result_b: pred?.predicted_b ?? null
+        result_b: pred?.predicted_b ?? null,
       };
     });
     predictedStandings = calculateStandings(simulatedMatches as Match[], groupTeams);
   }
 
-  const getFlagUrl = (iso: string) => {
-    if (!iso) return null;
-    const cleanIso = iso.toLowerCase();
-    const special: Record<string, string> = { 'gb-sct': 'gb-sct', 'gb-eng': 'gb-eng', 'gb-wls': 'gb-wls' };
-    if (special[cleanIso]) return `https://flagcdn.com/w40/${special[cleanIso]}.png`;
-    if (cleanIso.length !== 2) return null;
-    return `https://flagcdn.com/w40/${cleanIso}.png`;
-  };
+  const listParams = { group: selectedGroup, stage: selectedStage };
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 font-sans text-gray-900 dark:text-zinc-100 relative">
       <RealtimeRankingListener />
+
       {viewUserId && historyProfile && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-zinc-900 w-full max-w-xl max-h-[85vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-gray-100 dark:border-zinc-800">
             <div className="p-6 sm:p-8 border-b border-gray-50 dark:border-zinc-800 flex justify-between items-center bg-gray-50/50 dark:bg-zinc-800/50">
               <div className="flex items-center gap-4">
-                <img src={historyProfile.avatar} alt="av" className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 border-2 border-blue-500 shadow-lg" />
-                <div><h3 className="font-black text-xl uppercase tracking-tighter">{historyProfile.nickname}</h3><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Resumen de la Liga</p></div>
+                <MemberBadge
+                  flagUrl={historyProfile.flagUrl}
+                  nickname={historyProfile.nickname}
+                  size="md"
+                />
+                <div>
+                  <h3 className="font-black text-xl uppercase tracking-tighter">
+                    {historyProfile.nickname}
+                  </h3>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                    Resumen de la Liga
+                  </p>
+                </div>
               </div>
-              <Link href={`/groups/${poolId}?view=${view}${selectedGroup ? `&group=${selectedGroup}` : ''}`} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <Link
+                href={poolHref(poolId, { view, ...listParams })}
+                className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </Link>
             </div>
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="space-y-3">
                 {userHistory.map((h, i) => (
-                  <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/50">
-                    <div className="flex flex-col"><span className="text-[10px] font-black uppercase text-gray-400 mb-1">{h.match}</span><div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-500 italic">Pred: <span className="text-gray-900 dark:text-white not-italic">{h.pred}</span></span><span className="w-px h-3 bg-gray-200"></span><span className="text-xs font-bold text-gray-500 italic">Res: <span className="text-blue-600 not-italic">{h.res}</span></span></div></div>
-                    <div className="text-right"><div className="font-black text-lg tracking-tighter leading-none">{h.total} <span className="text-[10px] text-gray-400">PTS</span></div><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${h.pts > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>+{h.pts}</span></div>
+                  <div
+                    key={i}
+                    className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/50"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-gray-400 mb-1">
+                        {h.match}
+                      </span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs font-bold text-gray-500 italic">
+                          Pred:{" "}
+                          <span className="text-gray-900 dark:text-white not-italic">
+                            {h.pred}
+                          </span>
+                        </span>
+                        <span className="w-px h-3 bg-gray-200" />
+                        <span className="text-xs font-bold text-gray-500 italic">
+                          Res:{" "}
+                          <span className="text-blue-600 not-italic">{h.res}</span>
+                        </span>
+                      </div>
+                      {h.breakdown && (
+                        <span className="text-[8px] font-bold text-gray-400 uppercase mt-1 tracking-wider">
+                          {h.breakdown}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-lg tracking-tighter leading-none">
+                        {h.total}{" "}
+                        <span className="text-[10px] text-gray-400">PTS</span>
+                      </div>
+                      <span
+                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          h.pts > 0
+                            ? "bg-green-100 text-green-700"
+                            : "bg-gray-100 text-gray-400"
+                        }`}
+                      >
+                        +{h.pts}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -183,54 +429,95 @@ export default async function GroupDetailPage({
       <div className="max-w-6xl mx-auto">
         <nav className="mb-10 flex flex-wrap justify-between items-center gap-4">
           <div className="flex items-center gap-6">
-            <Link href="/groups" className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2 hover:translate-x-[-4px] transition-all">← Mis Ligas</Link>
-            <div className="hidden sm:block w-px h-4 bg-gray-100 dark:bg-zinc-800"></div>
+            <Link
+              href="/groups"
+              className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2 hover:translate-x-[-4px] transition-all"
+            >
+              ← Mis Ligas
+            </Link>
+            <div className="hidden sm:block w-px h-4 bg-gray-100 dark:bg-zinc-800" />
             <LeaveGroupButton poolId={Number(poolId)} poolName={pool.name} />
           </div>
           <CopyInviteCode code={pool.invite_code} />
         </nav>
 
-        <header className="mb-16 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h1 className="text-3xl sm:text-6xl font-black uppercase tracking-tighter leading-none">{pool.name}</h1>
-            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-4">Competición Privada • {memberIds.length} Jugadores</p>
+            <h1 className="text-3xl sm:text-6xl font-black uppercase tracking-tighter leading-none">
+              {pool.name}
+            </h1>
+            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-4">
+              Competición Privada • {memberIds.length} Jugadores
+            </p>
           </div>
         </header>
-
-        {view === 'groups' && (
-          <div className="mb-10 bg-gray-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-gray-100 dark:border-zinc-800 animate-in fade-in zoom-in">
-            <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 italic">Clasificación Grupo {selectedGroup}</h2>
-            <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Basado en tus predicciones actuales</p>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-4 space-y-8">
             <div className="sticky top-24">
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-6 flex items-center gap-4">Ranking <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900"></div></h2>
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-6 flex items-center gap-3">
+                <span className="flex items-center gap-2 shrink-0">
+                  Ranking
+                  <ScoringRulesButton size="sm" />
+                </span>
+                <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900" />
+              </h2>
               <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
                     {sortedRanking.map((member, index) => (
-                      <tr key={index} className="group">
+                      <tr key={member.id} className="group">
                         <td className="p-0">
-                          <Link href={`/groups/${poolId}?view=${view}&group=${selectedGroup}&view_user=${member.id}`} className={`flex items-center w-full px-4 py-4 transition-all ${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
+                          <Link
+                            href={poolHref(poolId, {
+                              view,
+                              ...listParams,
+                              view_user: member.id,
+                            })}
+                            className={`flex items-center w-full px-4 py-4 transition-all ${
+                              member.isMe
+                                ? "bg-blue-600 text-white"
+                                : "hover:bg-gray-50/50 dark:hover:bg-zinc-800/30"
+                            }`}
+                          >
                             <div className="w-10 text-center flex-shrink-0 flex flex-col items-center">
                               <span className="text-[10px] font-black">{index + 1}</span>
                               <div className="h-3 flex items-center">
-                                {member.trend === 'up' && <span className="text-[8px] text-green-500 animate-bounce">▲</span>}
-                                {member.trend === 'down' && <span className="text-[8px] text-red-500">▼</span>}
-                                {member.trend === 'same' && <span className="w-1 h-1 bg-gray-300 rounded-full"></span>}
+                                {member.trend === "up" && (
+                                  <span className="text-[8px] text-green-500 animate-bounce">
+                                    ▲
+                                  </span>
+                                )}
+                                {member.trend === "down" && (
+                                  <span className="text-[8px] text-red-500">▼</span>
+                                )}
+                                {member.trend === "same" && (
+                                  <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                )}
                               </div>
                             </div>
-                            <div className="flex-1 flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl overflow-hidden border ${member.isMe ? 'border-white/30' : 'border-gray-100'}`}><img src={member.avatar} alt="av" className="w-full h-full object-cover" /></div>
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-1.5"><span className="font-black text-xs uppercase truncate max-w-[100px]">{member.nickname}</span>{member.flag && <img src={getFlagUrl(member.flag) || ""} alt="f" className="w-3 h-2 rounded-[1px]" />}</div>
-                                <span className={`text-[7px] font-black uppercase tracking-widest ${member.isMe ? 'text-blue-200' : 'text-gray-400'}`}>Ver Historial</span>
+                            <div className="flex-1 flex items-center gap-3 min-w-0">
+                              <MemberBadge
+                                flagUrl={member.flagUrl}
+                                nickname={member.nickname}
+                                inverted={member.isMe}
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-black text-xs uppercase truncate">
+                                  {member.nickname}
+                                </span>
+                                <span
+                                  className={`text-[7px] font-black uppercase tracking-widest ${
+                                    member.isMe ? "text-blue-200" : "text-gray-400"
+                                  }`}
+                                >
+                                  Ver historial
+                                </span>
                               </div>
                             </div>
-                            <div className="px-4 text-right font-black text-lg tracking-tighter">{member.points}</div>
+                            <div className="px-4 text-right shrink-0 font-black text-lg tracking-tighter">
+                              {member.points}
+                            </div>
                           </Link>
                         </td>
                       </tr>
@@ -241,45 +528,108 @@ export default async function GroupDetailPage({
             </div>
           </div>
 
-          <div className="lg:col-span-8 space-y-10">
-            <div className="flex flex-col gap-8">
-              <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-fit">
-                <Link href={`/groups/${poolId}?view=today`} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'today' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Próximos</Link>
-                <Link href={`/groups/${poolId}?view=groups&group=${selectedGroup}`} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${view === 'groups' ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105' : 'text-gray-400'}`}>Grupos</Link>
+          <div className="lg:col-span-8 space-y-8">
+            <div className="flex flex-col gap-6">
+              <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar">
+                <Link
+                  href={poolHref(poolId, { view: "today" })}
+                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                    view === "today"
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
+                      : "text-gray-400"
+                  }`}
+                >
+                  Próximos
+                </Link>
+                <Link
+                  href={poolHref(poolId, { view: "groups", group: selectedGroup })}
+                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                    view === "groups"
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
+                      : "text-gray-400"
+                  }`}
+                >
+                  Grupos
+                </Link>
+                <Link
+                  href={poolHref(poolId, { view: "knockout", stage: selectedStage })}
+                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                    view === "knockout"
+                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
+                      : "text-gray-400"
+                  }`}
+                >
+                  Eliminatorias
+                </Link>
               </div>
-              {view === 'groups' && (
-                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2 items-center justify-between">
-                  <div className="flex flex-wrap gap-2">
-                    {groups.map(g => (
-                      <Link key={g} href={`/groups/${poolId}?view=groups&group=${g}`} className={`w-10 h-10 flex items-center justify-center rounded-xl text-xs font-black transition-all ${selectedGroup === g ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800'}`}>{g}</Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-              {view === 'groups' && (
-                <div className="space-y-10">
-                  <GroupStandings stats={groupStandings} predictedStats={predictedStandings} />
-                  <div className="grid grid-cols-1 gap-8">
-                    {matches?.map((match: Match) => {
-                      const prediction = myPredictions?.find(p => p.match_id === match.id);
-                      return <MatchCard key={match.id} match={match} userId={user.id} initialPrediction={prediction} poolId={poolId} />;
-                    })}
-                  </div>
-                </div>
-              )}
-              {view !== 'groups' && (
-                <div className="grid grid-cols-1 gap-8">
-                  {matches?.map((match: Match) => {
-                    const prediction = myPredictions?.find(p => p.match_id === match.id);
-                    return <MatchCard key={match.id} match={match} userId={user.id} initialPrediction={prediction} poolId={poolId} />;
-                  })}
+
+              {view === "groups" && (
+                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2">
+                  {GROUPS.map((g) => (
+                    <Link
+                      key={g}
+                      href={poolHref(poolId, { view: "groups", group: g })}
+                      className={`w-10 h-10 flex items-center justify-center rounded-xl text-xs font-black transition-all ${
+                        selectedGroup === g
+                          ? "bg-blue-600 text-white shadow-lg"
+                          : "bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800"
+                      }`}
+                    >
+                      {g}
+                    </Link>
+                  ))}
                 </div>
               )}
 
-            {isCreator && (
-              <DeletePoolButton poolId={Number(poolId)} />
+              {view === "knockout" && (
+                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2">
+                  {KNOCKOUT_STAGES.map((stage) => (
+                    <Link
+                      key={stage}
+                      href={poolHref(poolId, { view: "knockout", stage })}
+                      className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                        selectedStage === stage
+                          ? "bg-blue-600 text-white shadow-lg"
+                          : "bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800"
+                      }`}
+                    >
+                      {KNOCKOUT_LABELS[stage]}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {view === "groups" && (
+              <div className="space-y-8">
+                <GroupStandings stats={groupStandings} predictedStats={predictedStandings} />
+              </div>
             )}
+
+            {matches.length > 0 ? (
+              <div className="grid grid-cols-1 gap-8">
+                {matches.map((match) => {
+                  const prediction = myPredictions?.find((p) => p.match_id === match.id);
+                  return (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      userId={user.id}
+                      initialPrediction={prediction}
+                      poolId={poolId}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-16 text-center rounded-[2rem] border border-dashed border-gray-200 dark:border-zinc-800">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                  No hay partidos en esta vista
+                </p>
+              </div>
+            )}
+
+            {isCreator && <DeletePoolButton poolId={Number(poolId)} />}
           </div>
         </div>
       </div>

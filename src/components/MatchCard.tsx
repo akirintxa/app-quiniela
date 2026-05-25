@@ -1,31 +1,76 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Match, Prediction } from "@/types";
 import { savePrediction } from "@/app/actions";
 import { createClient } from "@/utils/supabase/client";
-import { calculatePoints } from "@/lib/points";
+import { calculatePoints, formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 
 interface MatchCardProps {
-  match: Match & { 
-    is_locked?: boolean; 
+  match: Match & {
+    is_locked?: boolean;
     is_finished?: boolean;
     placeholder_a?: string;
     placeholder_b?: string;
     is_confirmed_a?: boolean;
     is_confirmed_b?: boolean;
+    ghost_team_a?: string;
+    ghost_team_b?: string;
   };
   userId?: string;
   initialPrediction?: Prediction | null;
   poolId?: string;
+  suppressSave?: boolean;
+  controlledDraft?: {
+    scoreA: number | string;
+    scoreB: number | string;
+    winnerId: number | null;
+  };
+  onDraftChange?: (draft: {
+    scoreA: number | string;
+    scoreB: number | string;
+    winnerId: number | null;
+  }) => void;
 }
 
-export default function MatchCard({ match, userId, initialPrediction, poolId }: MatchCardProps) {
+export default function MatchCard({
+  match,
+  userId,
+  initialPrediction,
+  poolId,
+  suppressSave = false,
+  controlledDraft,
+  onDraftChange,
+}: MatchCardProps) {
+  const router = useRouter();
+  const isControlled = controlledDraft !== undefined;
   const [scoreA, setScoreA] = useState<number | string>(initialPrediction?.predicted_a ?? "");
   const [scoreB, setScoreB] = useState<number | string>(initialPrediction?.predicted_b ?? "");
   const [winnerId, setWinnerId] = useState<number | null>(initialPrediction?.predicted_winner_id ?? null);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const effectiveScoreA = isControlled ? controlledDraft.scoreA : scoreA;
+  const effectiveScoreB = isControlled ? controlledDraft.scoreB : scoreB;
+  const effectiveWinnerId = isControlled ? controlledDraft.winnerId : winnerId;
+
+  const patchScores = (
+    patch: Partial<{ scoreA: number | string; scoreB: number | string; winnerId: number | null }>
+  ) => {
+    const next = {
+      scoreA: patch.scoreA ?? effectiveScoreA,
+      scoreB: patch.scoreB ?? effectiveScoreB,
+      winnerId: patch.winnerId !== undefined ? patch.winnerId : effectiveWinnerId,
+    };
+    if (isControlled) {
+      onDraftChange?.(next);
+    } else {
+      setScoreA(next.scoreA);
+      setScoreB(next.scoreB);
+      setWinnerId(next.winnerId);
+    }
+  };
   
   const [showSpy, setShowSpy] = useState(false);
   const [groupPredictions, setGroupPredictions] = useState<{
@@ -38,10 +83,11 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const [loadingSpy, setLoadingSpy] = useState(false);
 
   useEffect(() => {
+    if (isControlled) return;
     setScoreA(initialPrediction?.predicted_a ?? "");
     setScoreB(initialPrediction?.predicted_b ?? "");
     setWinnerId(initialPrediction?.predicted_winner_id ?? null);
-  }, [initialPrediction]);
+  }, [initialPrediction, isControlled]);
 
   const startTime = new Date(match.start_time);
   
@@ -50,7 +96,10 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const isLive = match.is_locked && !isFinished;
   const isLocked = match.is_locked || isMatchStarted || isFinished;
   const isKnockout = match.stage !== "group";
-  const isDraw = scoreA !== "" && scoreB !== "" && Number(scoreA) === Number(scoreB);
+  const isDraw =
+    effectiveScoreA !== "" &&
+    effectiveScoreB !== "" &&
+    Number(effectiveScoreA) === Number(effectiveScoreB);
 
   const teamAName = match.team_a?.name || `Equipo ${match.team_a_id}`;
   const teamBName = match.team_b?.name || `Equipo ${match.team_b_id}`;
@@ -61,21 +110,22 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
   const expectedMatchup = isKnockout ? `${pA || '?'} vs ${pB || '?'}` : null;
 
 
-  const isModified = 
-    scoreA !== (initialPrediction?.predicted_a ?? "") || 
-    scoreB !== (initialPrediction?.predicted_b ?? "") ||
-    winnerId !== (initialPrediction?.predicted_winner_id ?? null);
+  const isModified =
+    effectiveScoreA !== (initialPrediction?.predicted_a ?? "") ||
+    effectiveScoreB !== (initialPrediction?.predicted_b ?? "") ||
+    effectiveWinnerId !== (initialPrediction?.predicted_winner_id ?? null);
 
-  const hasData = scoreA !== "" && scoreB !== "";
+  const hasData = effectiveScoreA !== "" && effectiveScoreB !== "";
 
   const getStageName = (stage: string, groupId: string | null) => {
     if (stage === 'group') return groupId ? `Grupo ${groupId}` : 'Fase de Grupos';
     const stages: Record<string, string> = {
-      'round_32': 'Dieciseisavos',
-      'round_16': 'Octavos',
-      'quarter_final': 'Cuartos',
-      'semi_final': 'Semifinal',
-      'final': 'Final'
+      round_32: "Dieciseisavos",
+      round_16: "Octavos",
+      quarter_final: "Cuartos",
+      semi_final: "Semifinal",
+      third_place: "3er Puesto",
+      final: "Final",
     };
     return stages[stage] || stage;
   };
@@ -108,6 +158,9 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
     setLoading(true);
     try {
       await savePrediction(match.id, Number(scoreA), Number(scoreB), winnerId);
+      if (match.stage === "group") {
+        router.refresh();
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
@@ -261,12 +314,17 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
           <div className="flex items-center justify-between w-full gap-2 sm:gap-4 mb-8">
             <button 
               disabled={!isDraw || isLocked || !isKnockout}
-              onClick={() => setWinnerId(match.team_a_id)}
-              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
+              onClick={() => patchScores({ winnerId: match.team_a_id })}
+              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_a} isSelected={winnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} />
-              <div className="h-8 flex items-center justify-center">
+              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} />
+              <div className="h-8 flex flex-col items-center justify-center">
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
+                {match.ghost_team_a && (
+                  <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
+                    Pronóstico: {match.ghost_team_a}
+                  </span>
+                )}
               </div>
               {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
@@ -274,28 +332,48 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             <div className="flex flex-col items-center gap-1 flex-shrink-0">
               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">{isFinished ? 'Tu Pronóstico' : 'Tu Predicción'}</span>
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <input type="number" min="0" value={scoreA} onChange={(e) => setScoreA(e.target.value === "" ? "" : Number(e.target.value))} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+                <input type="number" min="0" value={effectiveScoreA} onChange={(e) => patchScores({ scoreA: e.target.value === "" ? "" : Number(e.target.value) })} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
                 <span className="text-gray-300 font-black">:</span>
-                <input type="number" min="0" value={scoreB} onChange={(e) => setScoreB(e.target.value === "" ? "" : Number(e.target.value))} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
+                <input type="number" min="0" value={effectiveScoreB} onChange={(e) => patchScores({ scoreB: e.target.value === "" ? "" : Number(e.target.value) })} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || loading || isLocked} />
               </div>
-              {initialPrediction?.points_won !== null && initialPrediction?.points_won !== undefined && isFinished && (
-                <div className="mt-3 px-3 py-1 bg-green-100 text-green-700 rounded-full text-[8px] font-black uppercase tracking-widest animate-in zoom-in duration-300">+{initialPrediction?.points_won} Puntos</div>
+              {initialPrediction?.points_won != null && isFinished && (
+                <div className="mt-3 flex flex-col items-center gap-1 animate-in zoom-in duration-300">
+                  <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[8px] font-black uppercase tracking-widest">
+                    +{initialPrediction.points_won} pts
+                  </div>
+                  {initialPrediction.predicted_a != null &&
+                    initialPrediction.predicted_b != null &&
+                    match.result_a != null &&
+                    match.result_b != null && (
+                      <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">
+                        {formatPointsBreakdown(
+                          getPointsBreakdown(initialPrediction, match)
+                        )}
+                      </span>
+                    )}
+                </div>
               )}
             </div>
 
             <button 
               disabled={!isDraw || isLocked || !isKnockout}
-              onClick={() => setWinnerId(match.team_b_id)}
-              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${winnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
+              onClick={() => patchScores({ winnerId: match.team_b_id })}
+              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_b} isSelected={winnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} />
-              <div className="h-8 flex items-center justify-center">
+              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} />
+              <div className="h-8 flex flex-col items-center justify-center">
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>
+                {match.ghost_team_b && (
+                  <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
+                    Pronóstico: {match.ghost_team_b}
+                  </span>
+                )}
               </div>
               {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
             </button>
           </div>
           
+          {!suppressSave && (
           <div className="w-full flex gap-3">
             {!userId ? (
               <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-dashed">Entrar para jugar</div>
@@ -306,11 +384,11 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
             ) : (
               <button 
                 onClick={handleSave} 
-                disabled={loading || !hasData || !isModified || (isKnockout && isDraw && !winnerId)} 
+                disabled={loading || !hasData || !isModified || (isKnockout && isDraw && !effectiveWinnerId)} 
                 className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black transition-all uppercase tracking-[0.2em] shadow-lg ${
                   saved ? 'bg-green-500 text-white shadow-green-500/20' : 
                   (!isModified && hasData) ? 'bg-gray-50 dark:bg-zinc-800 text-gray-400 border border-gray-100 dark:border-zinc-700 shadow-none cursor-default' :
-                  (!hasData || (isKnockout && isDraw && !winnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 
+                  (!hasData || (isKnockout && isDraw && !effectiveWinnerId)) ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none' : 
                   'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95'
                 }`}
               >
@@ -323,6 +401,7 @@ export default function MatchCard({ match, userId, initialPrediction, poolId }: 
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
 

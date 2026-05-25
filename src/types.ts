@@ -11,13 +11,15 @@ export interface Match {
   team_a?: Team;
   team_b?: Team;
   group_id: string | null;
-  stage: "group" | "round_32" | "round_16" | "quarter_final" | "semi_final" | "final";
+  stage: "group" | "round_32" | "round_16" | "quarter_final" | "semi_final" | "third_place" | "final";
   start_time: string;
   result_a: number | null;
   result_b: number | null;
   winner_id: number | null;
   is_locked: boolean;
   is_finished: boolean;
+  bracket_round?: number | null;
+  bracket_index?: number | null;
 }
 
 export interface Prediction {

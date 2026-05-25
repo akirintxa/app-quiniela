@@ -32,15 +32,43 @@ export default async function GroupsPage({
 
   const createPool = async (formData: FormData) => {
     'use server';
-    const name = formData.get('name') as string;
+    const name = (formData.get('name') as string)?.trim();
+    if (!name) {
+      redirect('/groups?error=create_failed');
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) redirect('/login');
+
     const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const { data: pool } = await supabase.from('pools').insert({ name, creator_id: user.id, invite_code: inviteCode }).select().single();
-    if (pool) await supabase.from('pool_members').insert({ pool_id: pool.id, user_id: user.id, role: 'admin' });
+
+    const { data: pool, error: poolError } = await supabase
+      .from('pools')
+      .insert({ name, creator_id: user.id, invite_code: inviteCode })
+      .select()
+      .single();
+
+    if (poolError || !pool) {
+      console.error('createPool pools insert:', poolError?.message);
+      redirect('/groups?error=create_failed');
+    }
+
+    const { error: memberError } = await supabase.from('pool_members').insert({
+      pool_id: pool.id,
+      user_id: user.id,
+      role: 'admin',
+    });
+
+    if (memberError) {
+      console.error('createPool pool_members insert:', memberError.message);
+      await supabase.from('pools').delete().eq('id', pool.id).eq('creator_id', user.id);
+      redirect('/groups?error=create_failed');
+    }
+
     revalidatePath('/groups');
-    redirect('/groups?message=success_create');
+    revalidatePath(`/groups/${pool.id}`);
+    redirect(`/groups/${pool.id}`);
   };
 
   const joinPool = async (formData: FormData) => {

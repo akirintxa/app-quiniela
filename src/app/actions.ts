@@ -3,7 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
 import { calculatePoints } from '@/lib/points';
+import { isTournamentStarted } from '@/lib/tournament';
+import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
+import {
+  getMatchIdsToInvalidateOnGroupChange,
+  getMatchIdsToInvalidateOnKnockoutChange,
+} from '@/lib/knockout-invalidation';
 import { Match, Prediction } from '@/types';
+import { GroupId } from '@/types/knockout';
 
 // Helper to check admin permission
 async function checkAdmin() {
@@ -19,13 +26,27 @@ async function checkAdmin() {
   return supabase;
 }
 
+async function invalidateKnockoutPredictions(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  matchIds: number[]
+) {
+  const unique = [...new Set(matchIds)].filter(Boolean);
+  if (unique.length === 0) return;
+  await supabase.from('predictions').delete().eq('user_id', userId).in('match_id', unique);
+}
+
 // USER: Save a prediction
 export async function savePrediction(matchId: number, scoreA: number, scoreB: number, winnerId?: number | null) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Debes iniciar sesión');
 
-  const { data: match } = await supabase.from('matches').select('is_locked, is_finished, start_time, team_a_id, team_b_id').eq('id', matchId).single();
+  const { data: match } = await supabase
+    .from('matches')
+    .select('is_locked, is_finished, start_time, team_a_id, team_b_id, stage, group_id')
+    .eq('id', matchId)
+    .single();
   if (!match) throw new Error('Partido no encontrado');
   
   if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
@@ -46,12 +67,120 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
     .select();
 
   if (error) throw error;
+
+  if (match.stage === 'group' && match.group_id) {
+    const toClear = getMatchIdsToInvalidateOnGroupChange(match.group_id as GroupId);
+    await invalidateKnockoutPredictions(supabase, user.id, toClear);
+  } else if (match.stage !== 'group') {
+    const downstream = getMatchIdsToInvalidateOnKnockoutChange(matchId).filter((id) => id !== matchId);
+    await invalidateKnockoutPredictions(supabase, user.id, downstream);
+  }
+
   revalidatePath('/');
   revalidatePath('/groups');
   return data;
 }
 
-// USER: Randomize Group Predictions
+export type StagePredictionInput = {
+  matchId: number;
+  scoreA: number;
+  scoreB: number;
+  winnerId?: number | null;
+};
+
+/** Guarda varias predicciones de una fase en un solo paso */
+export async function saveStagePredictions(items: StagePredictionInput[]) {
+  if (items.length === 0) return { saved: 0 };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Debes iniciar sesión");
+
+  const matchIds = items.map((i) => i.matchId);
+  const { data: matches } = await supabase.from("matches").select("*").in("id", matchIds);
+  const matchMap = new Map((matches ?? []).map((m) => [m.id, m]));
+
+  const rows: {
+    user_id: string;
+    match_id: number;
+    predicted_a: number;
+    predicted_b: number;
+    predicted_winner_id: number | null;
+  }[] = [];
+  const downstreamToClear = new Set<number>();
+
+  for (const item of items) {
+    const match = matchMap.get(item.matchId);
+    if (!match) continue;
+    if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
+      continue;
+    }
+
+    const predictedWinnerId =
+      item.winnerId ??
+      (item.scoreA > item.scoreB
+        ? match.team_a_id
+        : item.scoreB > item.scoreA
+          ? match.team_b_id
+          : null);
+
+    rows.push({
+      user_id: user.id,
+      match_id: item.matchId,
+      predicted_a: item.scoreA,
+      predicted_b: item.scoreB,
+      predicted_winner_id: predictedWinnerId,
+    });
+
+    if (match.stage !== "group") {
+      getMatchIdsToInvalidateOnKnockoutChange(item.matchId)
+        .filter((id) => id !== item.matchId)
+        .forEach((id) => downstreamToClear.add(id));
+    }
+  }
+
+  if (rows.length === 0) return { saved: 0 };
+
+  const { error } = await supabase
+    .from("predictions")
+    .upsert(rows, { onConflict: "user_id,match_id" });
+
+  if (error) throw error;
+
+  await invalidateKnockoutPredictions(supabase, user.id, [...downstreamToClear]);
+
+  revalidatePath("/");
+  revalidatePath("/groups");
+
+  return { saved: rows.length };
+}
+
+function buildRandomPredictions(
+  userId: string,
+  matches: { id: number; stage: string; team_a_id: number; team_b_id: number }[]
+) {
+  return matches.map((match) => {
+    const scoreA = Math.floor(Math.random() * 4);
+    const scoreB = Math.floor(Math.random() * 4);
+    let winnerId = null;
+    if (match.stage !== 'group' && scoreA === scoreB) {
+      winnerId = Math.random() > 0.5 ? match.team_a_id : match.team_b_id;
+    } else {
+      winnerId = scoreA > scoreB ? match.team_a_id : scoreB > scoreA ? match.team_b_id : null;
+    }
+    return {
+      user_id: userId,
+      match_id: match.id,
+      predicted_a: scoreA,
+      predicted_b: scoreB,
+      predicted_winner_id: winnerId,
+    };
+  });
+}
+
+// USER: Randomize Group Predictions (single group)
 export async function randomizeGroupPredictions(groupId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -61,30 +190,44 @@ export async function randomizeGroupPredictions(groupId: string) {
     .from('matches')
     .select('*')
     .eq('group_id', groupId)
+    .eq('stage', 'group')
     .eq('is_finished', false)
     .eq('is_locked', false);
 
   if (!matches || matches.length === 0) return;
 
-  const predictions = matches.map(match => {
-    const scoreA = Math.floor(Math.random() * 4);
-    const scoreB = Math.floor(Math.random() * 4);
-    let winnerId = null;
-    if (match.stage !== 'group' && scoreA === scoreB) {
-      winnerId = Math.random() > 0.5 ? match.team_a_id : match.team_b_id;
-    } else {
-      winnerId = scoreA > scoreB ? match.team_a_id : (scoreB > scoreA ? match.team_b_id : null);
-    }
-    return {
-      user_id: user.id,
-      match_id: match.id,
-      predicted_a: scoreA,
-      predicted_b: scoreB,
-      predicted_winner_id: winnerId
-    };
-  });
+  await supabase
+    .from('predictions')
+    .upsert(buildRandomPredictions(user.id, matches), { onConflict: 'user_id,match_id' });
 
-  await supabase.from('predictions').upsert(predictions, { onConflict: 'user_id,match_id' });
+  const toClear = getMatchIdsToInvalidateOnGroupChange(groupId as GroupId);
+  await invalidateKnockoutPredictions(supabase, user.id, toClear);
+
+  revalidatePath('/');
+  revalidatePath('/groups');
+}
+
+// USER: Randomize all group-stage predictions (A–L)
+export async function randomizeAllGroupPredictions() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: matches } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('stage', 'group')
+    .eq('is_finished', false)
+    .eq('is_locked', false);
+
+  if (!matches || matches.length === 0) return;
+
+  await supabase
+    .from('predictions')
+    .upsert(buildRandomPredictions(user.id, matches), { onConflict: 'user_id,match_id' });
+
+  await invalidateKnockoutPredictions(supabase, user.id, KNOCKOUT_MATCH_IDS);
+
   revalidatePath('/');
   revalidatePath('/groups');
 }
@@ -133,14 +276,39 @@ export async function randomizeKnockoutPredictions(stage: string) {
 
 // USER: Create Pool
 export async function createPool(formData: FormData) {
-  const name = formData.get('name') as string;
+  const name = (formData.get('name') as string)?.trim();
+  if (!name) throw new Error('El nombre de la liga es obligatorio');
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) throw new Error('Debes iniciar sesión');
+
   const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const { data: pool } = await supabase.from('pools').insert({ name, creator_id: user.id, invite_code: inviteCode }).select().single();
-  if (pool) await supabase.from('pool_members').insert({ pool_id: pool.id, user_id: user.id, role: 'admin' });
+
+  const { data: pool, error: poolError } = await supabase
+    .from('pools')
+    .insert({ name, creator_id: user.id, invite_code: inviteCode })
+    .select()
+    .single();
+
+  if (poolError || !pool) {
+    throw new Error(poolError?.message ?? 'No se pudo crear la liga');
+  }
+
+  const { error: memberError } = await supabase.from('pool_members').insert({
+    pool_id: pool.id,
+    user_id: user.id,
+    role: 'admin',
+  });
+
+  if (memberError) {
+    await supabase.from('pools').delete().eq('id', pool.id).eq('creator_id', user.id);
+    throw new Error(memberError.message);
+  }
+
   revalidatePath('/groups');
+  revalidatePath(`/groups/${pool.id}`);
+  return pool;
 }
 
 // USER: Join Pool
@@ -206,8 +374,7 @@ export async function deletePool(poolId: number) {
   }
 // USER: Update Profile
 export async function updateProfile(formData: FormData) {
-  const nickname = formData.get('nickname') as string;
-  const avatarUrl = formData.get('avatar_url') as string;
+  const nickname = (formData.get('nickname') as string)?.trim();
   const favoriteTeamId = formData.get('favorite_team_id') as string;
 
   if (!nickname) return { error: 'El apodo es obligatorio' };
@@ -217,41 +384,64 @@ export async function updateProfile(formData: FormData) {
   
   if (!user) return { error: 'No autorizado' };
 
-  // 0. Bloquear cambio de equipo favorito si ya empezó el mundial
-  const tournamentStarted = new Date() >= new Date("2026-06-11T18:00:00Z");
+  const tournamentStarted = await isTournamentStarted(supabase);
   if (tournamentStarted) {
-    const { data: existingProfile } = await supabase.from('profiles').select('favorite_team_id').eq('id', user.id).single();
-    if (existingProfile && existingProfile.favorite_team_id && existingProfile.favorite_team_id !== (favoriteTeamId ? Number(favoriteTeamId) : null)) {
-      return { error: 'El candidato al título no se puede cambiar una vez iniciado el torneo' };
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('favorite_team_id')
+      .eq('id', user.id)
+      .single();
+    const newTeamId = favoriteTeamId ? Number(favoriteTeamId) : null;
+    if (
+      existingProfile?.favorite_team_id != null &&
+      existingProfile.favorite_team_id !== newTeamId
+    ) {
+      return {
+        error:
+          'El equipo favorito no se puede cambiar: el torneo ya tiene resultados oficiales',
+      };
     }
   }
 
-  // 1. Update Auth Metadata
-  const { error: authError } = await supabase.auth.updateUser({ 
-    data: { 
-      nickname: nickname,
-      avatar_url: avatarUrl
-    } 
+  const { error: authError } = await supabase.auth.updateUser({
+    data: { nickname },
   });
-  
+
   if (authError) return { error: 'Error al actualizar metadatos' };
 
-  // 2. Update Public Profiles Table
-  const { error: profileError } = await supabase
+  const teamId = favoriteTeamId ? Number(favoriteTeamId) : null;
+  const profilePayload = {
+    nickname,
+    favorite_team_id: teamId,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: updatedRows, error: updateError } = await supabase
     .from('profiles')
-    .upsert({ 
-      id: user.id, 
-      nickname: nickname,
-      avatar_url: avatarUrl,
-      favorite_team_id: favoriteTeamId ? Number(favoriteTeamId) : null
+    .update(profilePayload)
+    .eq('id', user.id)
+    .select('id');
+
+  if (updateError) {
+    console.error('updateProfile:', updateError.message);
+    return { error: updateError.message };
+  }
+
+  if (!updatedRows?.length) {
+    const { error: insertError } = await supabase.from('profiles').insert({
+      id: user.id,
+      ...profilePayload,
     });
+    if (insertError) {
+      console.error('updateProfile insert:', insertError.message);
+      return { error: insertError.message };
+    }
+  }
 
-  if (profileError) return { error: 'Error al actualizar perfil público' };
-
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
   revalidatePath('/profile');
   revalidatePath('/ranking');
-  
+
   return { success: true };
 }
 

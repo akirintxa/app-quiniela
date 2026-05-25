@@ -3,6 +3,7 @@ import { Match, Team } from "@/types";
 
 export interface TeamStats {
   team: Team;
+  groupId?: string;
   played: number;
   won: number;
   drawn: number;

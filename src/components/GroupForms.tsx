@@ -15,6 +15,12 @@ export default function GroupForms({ createPool, joinPool }: { createPool: (fd: 
     if (error === 'invalid_code') return { text: 'Código inválido o liga no encontrada', type: 'error' };
     if (error === 'already_member') return { text: 'Ya perteneces a esta liga', type: 'error' };
     if (error === 'join_failed') return { text: 'Error al unirse a la liga', type: 'error' };
+    if (error === 'create_failed') {
+      return {
+        text: 'No se pudo crear la liga. Comprueba que estás logueado e inténtalo de nuevo.',
+        type: 'error',
+      };
+    }
     if (message === 'success_create') return { text: 'Liga creada con éxito', type: 'success' };
     
     return null;

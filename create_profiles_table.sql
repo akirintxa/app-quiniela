@@ -3,6 +3,8 @@
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   nickname TEXT UNIQUE,
+  avatar_url TEXT,
+  favorite_team_id INT REFERENCES public.teams(id),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -14,9 +16,16 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public profiles are viewable by everyone" 
 ON profiles FOR SELECT USING (true);
 
--- Users can update only their own profile
-CREATE POLICY "Users can update own profile" 
-ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile"
+ON profiles FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+ON profiles FOR UPDATE
+TO authenticated
+USING (auth.uid() = id)
+WITH CHECK (auth.uid() = id);
 
 -- 4. Function to handle new user signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()

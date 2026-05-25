@@ -156,10 +156,6 @@ BEGIN
     ((SELECT id FROM teams WHERE iso_code = 'GB-ENG'), (SELECT id FROM teams WHERE iso_code = 'PA'), 'L', 'group', '2026-06-27 18:00:00+00'),
     ((SELECT id FROM teams WHERE iso_code = 'GH'), (SELECT id FROM teams WHERE iso_code = 'HR'), 'L', 'group', '2026-06-27 21:00:00+00');
 
-    -- RONDA DE 32
-    INSERT INTO matches (team_a_id, team_b_id, stage, start_time) VALUES
-    ((SELECT id FROM teams WHERE iso_code = '1A'), (SELECT id FROM teams WHERE iso_code = '3X1'), 'round_32', '2026-06-28 18:00:00+00'),
-    ((SELECT id FROM teams WHERE iso_code = '1B'), (SELECT id FROM teams WHERE iso_code = '3X2'), 'round_32', '2026-06-28 21:00:00+00'),
-    ((SELECT id FROM teams WHERE iso_code = '1C'), (SELECT id FROM teams WHERE iso_code = '2D'), 'round_32', '2026-06-29 18:00:00+00'),
-    ((SELECT id FROM teams WHERE iso_code = '1D'), (SELECT id FROM teams WHERE iso_code = '2C'), 'round_32', '2026-06-29 21:00:00+00');
 END $$;
+
+-- Eliminatorias completas (partidos 73–104): ejecutar también knockout_structure.sql

@@ -1,129 +1,543 @@
-
 import { Match, Prediction, Team } from "@/types";
+import {
+  BracketSlot,
+  DisplaySource,
+  GroupId,
+  KnockoutMatchViewModel,
+  KnockoutTeamSlot,
+  ResolveKnockoutInput,
+  SlotSource,
+  StandingsMode,
+  ThirdPlaceAssignment,
+} from "@/types/knockout";
+import { BRACKET_FIXTURES, getFixtureByMatchId } from "./bracket-fixtures";
+import { getPlaceholderLabel, slotToPlaceholderCode } from "./bracket-labels";
+import {
+  applyThirdPlaceToMap,
+  buildThirdPlaceAssignment,
+  rankBestThirdPlaces,
+} from "./third-place-combinations";
 import { calculateStandings, TeamStats } from "./standings";
 
-/**
- * Resolves placeholder teams in knockout matches based on group stage predictions.
- * Handles placeholders like '1A', '2B', '3X1', etc.
- */
+const GROUP_IDS: GroupId[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
+/** Grupos con todos los partidos (no finalizados) ya predichos */
+export function getCompletedGroups(
+  allGroupMatches: Match[],
+  userPredictions: Prediction[]
+): Set<GroupId> {
+  const completed = new Set<GroupId>();
+  GROUP_IDS.forEach((gid) => {
+    const groupMatches = allGroupMatches.filter(
+      (m) => m.group_id === gid && m.stage === "group" && !m.is_finished
+    );
+    if (groupMatches.length === 0) return;
+    const done = groupMatches.every((m) => {
+      const p = userPredictions.find((pr) => pr.match_id === m.id);
+      return p?.predicted_a != null && p?.predicted_b != null;
+    });
+    if (done) completed.add(gid);
+  });
+  return completed;
+}
+
+export function computeGroupStandings(
+  allGroupMatches: Match[],
+  userPredictions: Prediction[],
+  allTeams: Team[],
+  mode: StandingsMode
+): Record<GroupId, TeamStats[]> {
+  const groupStandings: Record<string, TeamStats[]> = {};
+
+  GROUP_IDS.forEach((gid) => {
+    const matchesInGroup = allGroupMatches.filter((m) => m.group_id === gid);
+    const teamsInGroup = Array.from(
+      new Set([
+        ...matchesInGroup.map((m) => m.team_a_id),
+        ...matchesInGroup.map((m) => m.team_b_id),
+      ])
+    )
+      .map((id) => allTeams.find((t) => t.id === id))
+      .filter(Boolean) as Team[];
+
+    const sourceMatches = matchesInGroup.map((m) => {
+      if (mode === "real") {
+        if (m.is_finished) return m;
+        return { ...m, result_a: null, result_b: null };
+      }
+      if (m.is_finished) return m;
+      const pred = userPredictions.find((p) => p.match_id === m.id);
+      if (!pred || pred.predicted_a === null || pred.predicted_b === null) {
+        return { ...m, result_a: null, result_b: null };
+      }
+      return {
+        ...m,
+        result_a: pred.predicted_a,
+        result_b: pred.predicted_b,
+      };
+    });
+
+    const standings = calculateStandings(sourceMatches as Match[], teamsInGroup).map(
+      (s, idx) => ({ ...s, groupId: gid, rank: idx + 1 })
+    );
+    groupStandings[gid] = standings;
+  });
+
+  return groupStandings as Record<GroupId, TeamStats[]>;
+}
+
+function groupHasFinishedResults(groupId: GroupId, groupMatches: Match[]): boolean {
+  return groupMatches.some(
+    (m) =>
+      m.group_id === groupId &&
+      m.is_finished &&
+      m.result_a !== null &&
+      m.result_b !== null
+  );
+}
+
+function buildPlaceholderMap(
+  groupStandings: Record<GroupId, TeamStats[]>,
+  allThirdPlaces: TeamStats[],
+  completedGroups: Set<GroupId>,
+  groupsAllowedForPositions: Set<GroupId>
+): { map: Record<string, Team>; assignment: ThirdPlaceAssignment | null } {
+  const map: Record<string, Team> = {};
+
+  GROUP_IDS.forEach((gid) => {
+    if (!completedGroups.has(gid) || !groupsAllowedForPositions.has(gid)) return;
+    const standings = groupStandings[gid];
+    if (standings?.[0]) map[`1${gid}`] = standings[0].team;
+    if (standings?.[1]) map[`2${gid}`] = standings[1].team;
+  });
+
+  const rankedThirds = rankBestThirdPlaces(
+    allThirdPlaces
+      .filter(
+        (s) =>
+          s.groupId &&
+          completedGroups.has(s.groupId as GroupId) &&
+          groupsAllowedForPositions.has(s.groupId as GroupId)
+      )
+      .map((s) => ({ ...s, groupId: s.groupId }))
+  );
+
+  let assignment: ThirdPlaceAssignment | null = null;
+  if (rankedThirds.length >= 8) {
+    assignment = buildThirdPlaceAssignment(rankedThirds);
+    applyThirdPlaceToMap(map, rankedThirds, assignment);
+  }
+
+  return { map, assignment };
+}
+
+function getMatchWinnerTeam(
+  match: Match,
+  matchMap: Map<number, Match>,
+  placeholderMap: Record<string, Team>,
+  predictions: Prediction[],
+  displaySource: DisplaySource
+): Team | undefined {
+  if (displaySource === "real" && match.is_finished) {
+    const winnerId =
+      match.result_a! > match.result_b!
+        ? match.team_a_id
+        : match.result_b! > match.result_a!
+          ? match.team_b_id
+          : match.winner_id;
+    if (!winnerId) return undefined;
+    const resolvedA = resolveSlotTeam(
+      match.team_a,
+      match.id,
+      matchMap,
+      placeholderMap,
+      predictions,
+      displaySource
+    );
+    const resolvedB = resolveSlotTeam(
+      match.team_b,
+      match.id,
+      matchMap,
+      placeholderMap,
+      predictions,
+      displaySource
+    );
+    return winnerId === resolvedA?.id ? resolvedA : resolvedB;
+  }
+
+  const pred = predictions.find((p) => p.match_id === match.id);
+  if (!pred || pred.predicted_a === null || pred.predicted_b === null) return undefined;
+
+  const resolvedA = resolveSlotTeam(
+    match.team_a,
+    match.id,
+    matchMap,
+    placeholderMap,
+    predictions,
+    displaySource
+  );
+  const resolvedB = resolveSlotTeam(
+    match.team_b,
+    match.id,
+    matchMap,
+    placeholderMap,
+    predictions,
+    displaySource
+  );
+
+  if (pred.predicted_a > pred.predicted_b) return resolvedA;
+  if (pred.predicted_b > pred.predicted_a) return resolvedB;
+  if (pred.predicted_winner_id) {
+    return pred.predicted_winner_id === resolvedA?.id ? resolvedA : resolvedB;
+  }
+  return undefined;
+}
+
+function resolveSlotTeam(
+  team: Team | undefined,
+  _matchId: number,
+  matchMap: Map<number, Match>,
+  placeholderMap: Record<string, Team>,
+  predictions: Prediction[],
+  displaySource: DisplaySource
+): Team | undefined {
+  if (!team) return undefined;
+
+  const iso = team.iso_code;
+
+  if (placeholderMap[iso]) return placeholderMap[iso];
+
+  if (iso.startsWith("W")) {
+    const prevMatchId = parseInt(iso.substring(1), 10);
+    if (!isNaN(prevMatchId)) {
+      const prevMatch = matchMap.get(prevMatchId);
+      if (prevMatch) {
+        return getMatchWinnerTeam(prevMatch, matchMap, placeholderMap, predictions, displaySource);
+      }
+    }
+  }
+
+  if (iso.startsWith("L")) {
+    const prevMatchId = parseInt(iso.substring(1), 10);
+    if (!isNaN(prevMatchId)) {
+      const prevMatch = matchMap.get(prevMatchId);
+      if (prevMatch) {
+        const winner = getMatchWinnerTeam(
+          prevMatch,
+          matchMap,
+          placeholderMap,
+          predictions,
+          displaySource
+        );
+        const resolvedA = resolveSlotTeam(
+          prevMatch.team_a,
+          prevMatchId,
+          matchMap,
+          placeholderMap,
+          predictions,
+          displaySource
+        );
+        const resolvedB = resolveSlotTeam(
+          prevMatch.team_b,
+          prevMatchId,
+          matchMap,
+          placeholderMap,
+          predictions,
+          displaySource
+        );
+        if (winner && resolvedA && resolvedB) {
+          return winner.id === resolvedA.id ? resolvedB : resolvedA;
+        }
+      }
+    }
+  }
+
+  if (/^[12][A-L]$/.test(iso) || /^3[A-L]$/.test(iso) || /^3X[1-8]$/.test(iso)) {
+    return placeholderMap[iso];
+  }
+
+  return team;
+}
+
+function resolveSlotFromDefinition(
+  slot: BracketSlot,
+  matchMap: Map<number, Match>,
+  placeholderMap: Record<string, Team>,
+  predictions: Prediction[],
+  displaySource: DisplaySource,
+  thirdAssignment: ThirdPlaceAssignment | null
+): { team?: Team; code: string; label: string; source: SlotSource } {
+  const code = slotToPlaceholderCode(slot, thirdAssignment ?? undefined);
+  const label = getPlaceholderLabel(slot, thirdAssignment ?? undefined);
+
+  if (slot.kind === "winner") {
+    const prev = matchMap.get(slot.fromMatchId);
+    if (prev?.is_finished && displaySource === "real") {
+      const team = getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, "real");
+      if (team) return { team, code, label, source: "confirmed" };
+    }
+    const team = prev
+      ? getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, displaySource)
+      : undefined;
+    return { team, code, label, source: team ? "predicted" : "placeholder" };
+  }
+
+  if (slot.kind === "loser") {
+    const prev = matchMap.get(slot.fromMatchId);
+    if (prev) {
+      const winner = getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, displaySource);
+      const resolvedA = resolveSlotTeam(
+        prev.team_a,
+        slot.fromMatchId,
+        matchMap,
+        placeholderMap,
+        predictions,
+        displaySource
+      );
+      const resolvedB = resolveSlotTeam(
+        prev.team_b,
+        slot.fromMatchId,
+        matchMap,
+        placeholderMap,
+        predictions,
+        displaySource
+      );
+      if (winner && resolvedA && resolvedB) {
+        const loser = winner.id === resolvedA.id ? resolvedB : resolvedA;
+        const source: SlotSource =
+          prev.is_finished && displaySource === "real" ? "confirmed" : loser ? "predicted" : "placeholder";
+        return { team: loser, code, label, source };
+      }
+    }
+    return { team: undefined, code, label, source: "placeholder" };
+  }
+
+  const team = placeholderMap[code];
+  const source: SlotSource = team ? "predicted" : "placeholder";
+  return { team, code, label, source };
+}
+
+function buildTeamSlot(
+  resolved: ReturnType<typeof resolveSlotFromDefinition>,
+  predicted?: ReturnType<typeof resolveSlotFromDefinition>
+): KnockoutTeamSlot {
+  const displayTeam = resolved.team;
+  const predictedTeam = predicted?.team;
+  let isCorrect: boolean | undefined;
+  if (displayTeam && predictedTeam) {
+    isCorrect = displayTeam.id === predictedTeam.id;
+  }
+
+  return {
+    placeholderLabel: resolved.label,
+    placeholderCode: resolved.code,
+    displayTeam,
+    predictedTeam,
+    source: resolved.source,
+    isCorrect,
+  };
+}
+
+export function resolveKnockoutBracket(input: ResolveKnockoutInput): KnockoutMatchViewModel[] {
+  const { knockoutMatches, groupMatches, predictions, allTeams, displaySource } = input;
+
+  const realStandings = computeGroupStandings(groupMatches, predictions, allTeams, "real");
+  const predictedStandings = computeGroupStandings(
+    groupMatches,
+    predictions,
+    allTeams,
+    "predicted"
+  );
+
+  const completedGroups = getCompletedGroups(groupMatches, predictions);
+
+  const collectThirds = (standings: Record<GroupId, TeamStats[]>) => {
+    const thirds: TeamStats[] = [];
+    GROUP_IDS.forEach((gid) => {
+      if (!completedGroups.has(gid)) return;
+      const s = standings[gid];
+      if (s?.[2]) thirds.push({ ...s[2], groupId: gid });
+    });
+    return thirds;
+  };
+
+  const realThirds = collectThirds(realStandings);
+  const predictedThirds = collectThirds(predictedStandings);
+
+  const groupsWithRealResults = new Set<GroupId>(
+    GROUP_IDS.filter((gid) => groupHasFinishedResults(gid, groupMatches))
+  );
+
+  const { map: realMap, assignment: realAssignment } = buildPlaceholderMap(
+    realStandings,
+    realThirds,
+    completedGroups,
+    groupsWithRealResults
+  );
+  const { map: predictedMap, assignment: predictedAssignment } = buildPlaceholderMap(
+    predictedStandings,
+    predictedThirds,
+    completedGroups,
+    completedGroups
+  );
+
+  const matchMap = new Map<number, Match>();
+  knockoutMatches.forEach((m) => matchMap.set(m.id, { ...m }));
+
+  const displayMap = displaySource === "real" ? realMap : predictedMap;
+  const displayAssignment = displaySource === "real" ? realAssignment : predictedAssignment;
+
+  return knockoutMatches.map((match) => {
+    const fixture = getFixtureByMatchId(match.id);
+    if (!fixture) {
+      return {
+        match,
+        slotA: {
+          placeholderLabel: match.team_a?.name ?? "?",
+          placeholderCode: match.team_a?.iso_code ?? "?",
+          displayTeam: match.team_a,
+          source: "placeholder",
+        },
+        slotB: {
+          placeholderLabel: match.team_b?.name ?? "?",
+          placeholderCode: match.team_b?.iso_code ?? "?",
+          displayTeam: match.team_b,
+          source: "placeholder",
+        },
+        userPrediction: predictions.find((p) => p.match_id === match.id),
+      };
+    }
+
+    const resolvedA = resolveSlotFromDefinition(
+      fixture.slotA,
+      matchMap,
+      displayMap,
+      predictions,
+      displaySource,
+      displayAssignment
+    );
+    const resolvedB = resolveSlotFromDefinition(
+      fixture.slotB,
+      matchMap,
+      displayMap,
+      predictions,
+      displaySource,
+      displayAssignment
+    );
+
+    const predA = resolveSlotFromDefinition(
+      fixture.slotA,
+      matchMap,
+      predictedMap,
+      predictions,
+      "predicted",
+      predictedAssignment
+    );
+    const predB = resolveSlotFromDefinition(
+      fixture.slotB,
+      matchMap,
+      predictedMap,
+      predictions,
+      "predicted",
+      predictedAssignment
+    );
+
+    return {
+      match,
+      slotA: buildTeamSlot(resolvedA, predA),
+      slotB: buildTeamSlot(resolvedB, predB),
+      userPrediction: predictions.find((p) => p.match_id === match.id),
+    };
+  });
+}
+
+function mergeDisplaySlots(
+  predSlot: KnockoutTeamSlot,
+  realSlot?: KnockoutTeamSlot
+): KnockoutTeamSlot {
+  const useOfficial =
+    realSlot?.source === "confirmed" && realSlot.displayTeam !== undefined;
+
+  const displayTeam = useOfficial ? realSlot.displayTeam : predSlot.displayTeam;
+  const predictedTeam = predSlot.displayTeam;
+
+  return {
+    placeholderLabel: predSlot.placeholderLabel,
+    placeholderCode: predSlot.placeholderCode,
+    displayTeam,
+    predictedTeam,
+    source: useOfficial
+      ? "confirmed"
+      : predSlot.displayTeam
+        ? "predicted"
+        : "placeholder",
+    isCorrect:
+      useOfficial && displayTeam && predictedTeam
+        ? displayTeam.id === predictedTeam.id
+        : undefined,
+  };
+}
+
+/** Builds view models: predicción de grupos en vivo; oficial solo si hay resultado real */
+export function buildKnockoutViewModels(
+  knockoutMatches: Match[],
+  groupMatches: Match[],
+  predictions: Prediction[],
+  allTeams: Team[]
+): KnockoutMatchViewModel[] {
+  const predictedVm = resolveKnockoutBracket({
+    knockoutMatches,
+    groupMatches,
+    predictions,
+    allTeams,
+    displaySource: "predicted",
+  });
+
+  const realVm = resolveKnockoutBracket({
+    knockoutMatches,
+    groupMatches,
+    predictions,
+    allTeams,
+    displaySource: "real",
+  });
+
+  const realById = new Map(realVm.map((v) => [v.match.id, v]));
+
+  return predictedVm.map((predVm) => {
+    const real = realById.get(predVm.match.id);
+    return {
+      match: predVm.match,
+      slotA: mergeDisplaySlots(predVm.slotA, real?.slotA),
+      slotB: mergeDisplaySlots(predVm.slotB, real?.slotB),
+      userPrediction: predVm.userPrediction,
+    };
+  });
+}
+
+/** @deprecated Use resolveKnockoutBracket — kept for gradual migration */
 export function resolveKnockoutTeams(
   knockoutMatches: Match[],
   allGroupMatches: Match[],
   userPredictions: Prediction[],
   allTeams: Team[]
 ): Match[] {
-  // 1. Calculate standings for all groups
-  const groupIds = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
-  const groupStandings: Record<string, TeamStats[]> = {};
-  const allThirdPlaces: TeamStats[] = [];
-
-  groupIds.forEach(gid => {
-    const matchesInGroup = allGroupMatches.filter(m => m.group_id === gid);
-    const teamsInGroup = Array.from(new Set([
-      ...matchesInGroup.map(m => m.team_a_id),
-      ...matchesInGroup.map(m => m.team_b_id)
-    ])).map(id => allTeams.find(t => t.id === id)).filter(Boolean) as Team[];
-
-    // Use real results if finished, otherwise use predictions for standings
-    const simulatedMatches = matchesInGroup.map(m => {
-      if (m.is_finished) return m; // Prioridad a la realidad
-      
-      const pred = userPredictions.find(p => p.match_id === m.id);
-      return {
-        ...m,
-        result_a: pred?.predicted_a ?? null,
-        result_b: pred?.predicted_b ?? null
-      };
-    });
-
-    const standings = calculateStandings(simulatedMatches as Match[], teamsInGroup);
-    groupStandings[gid] = standings;
-    if (standings.length >= 3) {
-      allThirdPlaces.push(standings[2]);
-    }
-  });
-
-  // Sort best 3rd places: Points -> GD -> GF
-  const bestThirdPlaces = allThirdPlaces.sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.gd !== a.gd) return b.gd - a.gd;
-    return b.gf - a.gf;
-  });
-
-  // 2. Map placeholder ISO codes to teams
-  const placeholderMap: Record<string, Team> = {};
-  groupIds.forEach(gid => {
-    if (groupStandings[gid][0]) placeholderMap[`1${gid}`] = groupStandings[gid][0].team;
-    if (groupStandings[gid][1]) placeholderMap[`2${gid}`] = groupStandings[gid][1].team;
-  });
-  
-  bestThirdPlaces.forEach((stats, index) => {
-    placeholderMap[`3X${index + 1}`] = stats.team;
-  });
-
-  // 3. Resolve matches recursively
-  const matchMap = new Map<number, Match>();
-  // Initial fill
-  knockoutMatches.forEach(m => matchMap.set(m.id, { ...m }));
-
-  const resolveTeam = (team: Team | undefined, matchId: number): Team | undefined => {
-    if (!team) return undefined;
-    if (placeholderMap[team.iso_code]) return placeholderMap[team.iso_code];
-    
-    // Check if it's a winner placeholder like 'W73'
-    if (team.iso_code.startsWith('W')) {
-      const prevMatchIdStr = team.iso_code.substring(1);
-      const prevMatchId = parseInt(prevMatchIdStr);
-      if (!isNaN(prevMatchId)) {
-        const prevMatch = matchMap.get(prevMatchId);
-        if (prevMatch) {
-          // PRIORIDAD 1: Resultado REAL si el partido ya terminó
-          if (prevMatch.is_finished) {
-            const winnerId = prevMatch.result_a! > prevMatch.result_b! 
-              ? prevMatch.team_a_id 
-              : (prevMatch.result_b! > prevMatch.result_a! ? prevMatch.team_b_id : prevMatch.winner_id);
-            
-            const resolvedA = resolveTeam(prevMatch.team_a, prevMatchId);
-            const resolvedB = resolveTeam(prevMatch.team_b, prevMatchId);
-            return winnerId === resolvedA?.id ? resolvedA : resolvedB;
-          }
-
-          // PRIORIDAD 2: Predicción del usuario si aún no hay resultado real
-          const pred = userPredictions.find(p => p.match_id === prevMatchId);
-          if (pred && pred.predicted_a !== null && pred.predicted_b !== null) {
-            // Recurse to resolve the teams of the previous match first
-            const resolvedA = resolveTeam(prevMatch.team_a, prevMatchId);
-            const resolvedB = resolveTeam(prevMatch.team_b, prevMatchId);
-            
-            if (pred.predicted_a > pred.predicted_b) return resolvedA;
-            if (pred.predicted_b > pred.predicted_a) return resolvedB;
-            if (pred.predicted_winner_id) {
-              return pred.predicted_winner_id === (resolvedA?.id) ? resolvedA : resolvedB;
-            }
-          }
-        }
-      }
-    }
-    return team;
-  };
-
-  const resolvedMatches = knockoutMatches.map(match => {
-    const resolvedMatch = matchMap.get(match.id)!;
-    
-    const resolvedA = resolveTeam(match.team_a, match.id);
-    if (resolvedA) {
-      resolvedMatch.team_a = resolvedA;
-      resolvedMatch.team_a_id = resolvedA.id;
-    }
-
-    const resolvedB = resolveTeam(match.team_b, match.id);
-    if (resolvedB) {
-      resolvedMatch.team_b = resolvedB;
-      resolvedMatch.team_b_id = resolvedB.id;
-    }
-
-    return resolvedMatch;
-  });
-
-  return resolvedMatches;
+  const vms = buildKnockoutViewModels(
+    knockoutMatches,
+    allGroupMatches,
+    userPredictions,
+    allTeams
+  );
+  return vms.map((vm) => ({
+    ...vm.match,
+    team_a: vm.slotA.displayTeam ?? vm.match.team_a,
+    team_b: vm.slotB.displayTeam ?? vm.match.team_b,
+    team_a_id: (vm.slotA.displayTeam ?? vm.match.team_a)?.id ?? vm.match.team_a_id,
+    team_b_id: (vm.slotB.displayTeam ?? vm.match.team_b)?.id ?? vm.match.team_b_id,
+    placeholder_a: vm.slotA.placeholderCode,
+    placeholder_b: vm.slotB.placeholderCode,
+    is_confirmed_a: vm.slotA.source === "confirmed",
+    is_confirmed_b: vm.slotB.source === "confirmed",
+  })) as Match[];
 }
+
+export { BRACKET_FIXTURES, getDownstreamMatchIds } from "./bracket-fixtures";
