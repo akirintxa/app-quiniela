@@ -92,7 +92,7 @@ export default async function GroupDetailPage({
     .select("*")
     .eq("pool_id", poolId)
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
   if (!membership) redirect("/groups?error=not-a-member");
 
   const isCreator = pool.creator_id === user.id;
@@ -103,25 +103,43 @@ export default async function GroupDetailPage({
     .eq("pool_id", poolId);
   const memberIds = membersData?.map((m) => m.user_id) || [];
 
-  const { data: profilesData } = await supabase
-    .from("profiles")
-    .select("id, nickname, favorite_team_id")
-    .in("id", memberIds);
+  const { data: profilesData } =
+    memberIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, nickname, favorite_team_id")
+          .in("id", memberIds)
+      : { data: [] as { id: string; nickname: string | null; favorite_team_id: number | null }[] };
 
-  const favoriteTeamIds =
-    profilesData?.map((p) => p.favorite_team_id).filter((id): id is number => id != null) ||
-    [];
-  const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteTeamIds);
-
-  const poolPredictions = await fetchPoolMemberPredictions(
-    poolId,
-    user.id,
-    memberIds
+  const profileById = new Map(
+    (profilesData ?? []).map((p) => [p.id, p])
   );
 
-  const profileRows = (profilesData || []).map((p) => ({
-    id: p.id,
-    favorite_team_id: p.favorite_team_id,
+  const favoriteTeamIds =
+    (profilesData ?? [])
+      .map((p) => p.favorite_team_id)
+      .filter((id): id is number => id != null) || [];
+  const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteTeamIds);
+
+  let poolPredictions: Prediction[] = [];
+  try {
+    poolPredictions = await fetchPoolMemberPredictions(
+      poolId,
+      user.id,
+      memberIds
+    );
+  } catch (err) {
+    console.error("fetchPoolMemberPredictions:", err);
+    const { data: ownPreds } = await supabase
+      .from("predictions")
+      .select("*")
+      .eq("user_id", user.id);
+    poolPredictions = (ownPreds ?? []) as Prediction[];
+  }
+
+  const profileRows = memberIds.map((id) => ({
+    id,
+    favorite_team_id: profileById.get(id)?.favorite_team_id ?? null,
   }));
 
   const standings = sortStandingsByTotal(
@@ -205,6 +223,20 @@ export default async function GroupDetailPage({
       points: st?.totalPoints ?? 0,
       trend,
       isMe: p.id === user.id,
+    };
+  });
+
+  memberIds.forEach((id) => {
+    if (userMap[id]) return;
+    const st = standingByUser.get(id);
+    userMap[id] = {
+      id,
+      nickname: profileById.get(id)?.nickname || "Usuario",
+      flagUrl: null,
+      bonusPoints: st?.bonusPoints ?? 0,
+      points: st?.totalPoints ?? 0,
+      trend: "same",
+      isMe: id === user.id,
     };
   });
 
@@ -347,9 +379,9 @@ export default async function GroupDetailPage({
 
   const listParams = { group: selectedGroup, stage: selectedStage };
 
-  const poolMembers = (profilesData ?? []).map((p) => ({
-    id: p.id,
-    nickname: p.nickname || "Usuario",
+  const poolMembers = memberIds.map((id) => ({
+    id,
+    nickname: profileById.get(id)?.nickname || "Usuario",
   }));
 
   let phaseCompleteByUser: Record<string, boolean> = {};

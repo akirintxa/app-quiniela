@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { tryCreateServiceRoleClient } from "@/utils/supabase/admin";
 import { Prediction } from "@/types";
 
 export async function assertPoolMember(poolId: string, userId: string) {
@@ -23,6 +23,23 @@ export async function getPoolMemberIds(poolId: string): Promise<string[]> {
   return data?.map((m) => m.user_id) ?? [];
 }
 
+async function readPredictionsForUsers(
+  userIds: string[]
+): Promise<Prediction[]> {
+  if (userIds.length === 0) return [];
+
+  const admin = tryCreateServiceRoleClient();
+  const client = admin ?? (await createClient());
+
+  const { data, error } = await client
+    .from("predictions")
+    .select("*")
+    .in("user_id", userIds);
+
+  if (error) throw error;
+  return (data ?? []) as Prediction[];
+}
+
 /** Lee predicciones de todos los miembros de una liga (bypass RLS tras validar membresía). */
 export async function fetchPoolMemberPredictions(
   poolId: string,
@@ -32,16 +49,7 @@ export async function fetchPoolMemberPredictions(
   await assertPoolMember(poolId, callerUserId);
 
   const ids = memberIds ?? (await getPoolMemberIds(poolId));
-  if (ids.length === 0) return [];
-
-  const admin = createServiceRoleClient();
-  const { data, error } = await admin
-    .from("predictions")
-    .select("*")
-    .in("user_id", ids);
-
-  if (error) throw error;
-  return (data ?? []) as Prediction[];
+  return readPredictionsForUsers(ids);
 }
 
 export type PoolMatchPredictionRow = {
@@ -65,8 +73,10 @@ export async function fetchPoolMatchPredictionsForMembers(
   const memberIds = memberProfiles.map((m) => m.id);
   if (memberIds.length === 0) return [];
 
-  const admin = createServiceRoleClient();
-  const { data: preds, error } = await admin
+  const admin = tryCreateServiceRoleClient();
+  const client = admin ?? (await createClient());
+
+  const { data: preds, error } = await client
     .from("predictions")
     .select("predicted_a, predicted_b, points_won, user_id")
     .eq("match_id", matchId)
@@ -74,9 +84,7 @@ export async function fetchPoolMatchPredictionsForMembers(
 
   if (error) throw error;
 
-  const predByUser = new Map(
-    (preds ?? []).map((p) => [p.user_id, p])
-  );
+  const predByUser = new Map((preds ?? []).map((p) => [p.user_id, p]));
 
   return memberProfiles
     .map((member) => {

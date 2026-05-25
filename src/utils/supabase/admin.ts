@@ -18,3 +18,14 @@ export function createServiceRoleClient() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
+
+/** Igual que createServiceRoleClient pero devuelve null si falta la clave (p. ej. en Vercel). */
+export function tryCreateServiceRoleClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+
+  return createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}

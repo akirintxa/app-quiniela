@@ -139,18 +139,18 @@ export default async function GroupsPage({
                   >
                     <div className="flex items-center gap-6">
                       <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400 text-2xl font-black">
-                        {item.pools.name.substring(0, 1).toUpperCase()}
+                        {(item.pools?.name ?? "L").substring(0, 1).toUpperCase()}
                       </div>
                       <div>
                         <h3 className="text-xl font-black text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors uppercase tracking-tight">
-                          {item.pools.name}
+                          {item.pools?.name ?? "Liga"}
                         </h3>
                         <div className="flex items-center gap-3 mt-1">
                           <span className="text-[9px] font-black bg-gray-100 dark:bg-zinc-800 text-gray-500 px-2 py-1 rounded-md uppercase tracking-widest">
-                            {item.pools.pool_members[0].count} Jugadores
+                            {item.pools?.pool_members?.[0]?.count ?? "—"} Jugadores
                           </span>
                           <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">
-                            Código: {item.pools.invite_code}
+                            Código: {item.pools?.invite_code ?? "—"}
                           </span>
                         </div>
                       </div>
