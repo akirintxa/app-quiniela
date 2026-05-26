@@ -19,7 +19,7 @@ export const KNOCKOUT_STAGES = [
 ] as const;
 
 export const SCORING_RULES = [
-  { points: 2, label: "Ganador", detail: "Aciertas quién gana (o empate en grupos)" },
+  { points: 2, label: "Ganador", detail: "Aciertas quién gana (o empate)" },
   { points: 1, label: "Diferencia", detail: "Misma diferencia de goles entre equipos" },
   { points: 1, label: "Goles local", detail: "Marcador exacto del equipo A" },
   { points: 1, label: "Goles visita", detail: "Marcador exacto del equipo B" },
@@ -28,8 +28,8 @@ export const SCORING_RULES = [
 export const KNOCKOUT_QUALIFIER_RULE = {
   points: KNOCKOUT_QUALIFIER_BONUS,
   label: "Clasificado",
-  detail:
-    "Eliminatorias (16vos en adelante): aciertas qué equipo pasa de ronda (incluye penales)",
+  /** Texto corto (compacto / móvil en manual). */
+  detail: "16vos en adelante: aciertas quién pasa (incluye penales)",
 } as const;
 
 export type PointsBreakdown = {

@@ -74,26 +74,34 @@ export default function ScoringRules({
         Solo eliminatorias (16vos en adelante)
       </p>
       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <li className="flex items-start gap-3 bg-indigo-50/80 dark:bg-indigo-950/20 rounded-2xl px-4 py-3 border border-indigo-100/80 dark:border-indigo-900/40">
-          <span className="text-lg font-black text-indigo-600 leading-none shrink-0">
+        <li className="flex items-start gap-3 bg-indigo-50/80 dark:bg-indigo-950/20 rounded-2xl px-4 py-3 border border-indigo-100/80 dark:border-indigo-900/40 lg:col-span-2 lg:py-4 lg:px-5">
+          <span className="text-lg font-black text-indigo-600 leading-none shrink-0 lg:text-xl">
             +{KNOCKOUT_QUALIFIER_RULE.points}
           </span>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-black uppercase tracking-tight text-gray-900 dark:text-white">
               {KNOCKOUT_QUALIFIER_RULE.label}
             </p>
-            <p className="text-[9px] font-bold text-gray-500 dark:text-zinc-400 mt-0.5 leading-snug">
+            <p className="mt-0.5 text-[9px] font-bold text-gray-500 dark:text-zinc-400 leading-snug uppercase tracking-wide lg:hidden">
               {KNOCKOUT_QUALIFIER_RULE.detail}
             </p>
+            <div className="mt-1 hidden lg:block space-y-1.5 text-[11px] font-medium text-gray-600 dark:text-zinc-300 leading-relaxed normal-case tracking-normal">
+              <p>
+                En dieciseisavos y rondas siguientes puedes sumar{" "}
+                <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+                  +2 puntos extra
+                </span>{" "}
+                si aciertas qué equipo sigue adelante en el torneo.
+              </p>
+              <p className="text-gray-500 dark:text-zinc-400">
+                Si el partido va a penales, cuenta el equipo que realmente clasifica.
+                Este bono va aparte del marcador: puedes fallar el resultado y aun así
+                llevarte los +2 si atinas al clasificado.
+              </p>
+            </div>
           </div>
         </li>
       </ul>
-      <p className="mt-4 text-[8px] font-bold text-gray-500 dark:text-zinc-500 uppercase tracking-widest leading-relaxed">
-        En eliminatorias, el marcador 90&apos; (+ prórroga si aplica) puntúa como en
-        grupos (empate 1-1 = +2 de resultado aunque falle el equipo de penales). El
-        +2 clasificado es aparte: aciertas quién pasa de ronda, aunque no aciertes el
-        marcador.
-      </p>
       <p className="mt-5 text-[9px] font-black uppercase tracking-[0.2em] text-orange-700 dark:text-orange-400">
         Bono equipo favorito
       </p>

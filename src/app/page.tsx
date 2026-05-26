@@ -449,6 +449,43 @@ export default async function Home({
                 Aún no has predicho todos los partidos de {knockoutStageLabels[prevStageName]} — puedes ver las siguientes fases igualmente
               </p>
             )}
+            <p className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[8px] font-medium text-zinc-500 dark:text-zinc-400 sm:text-[9px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white bg-blue-400 shadow-sm dark:border-zinc-900"
+                  aria-hidden
+                >
+                  <span className="h-0.5 w-0.5 rounded-full bg-white" />
+                </span>
+                <span className="normal-case tracking-tight">
+                  Punto azul: equipo según tu pronóstico
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white bg-green-500 shadow-sm dark:border-zinc-900"
+                  aria-hidden
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="7"
+                    height="7"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="opacity-95"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </span>
+                <span className="normal-case tracking-tight">
+                  Check verde: clasificado oficial en ese partido
+                </span>
+              </span>
+            </p>
           </>
         )}
 
