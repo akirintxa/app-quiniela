@@ -144,6 +144,18 @@ function buildPlaceholderMap(
   return { map, assignment };
 }
 
+/** Partido con resultado usable para alimentar la ronda siguiente (finalizado o en vivo con marcador). */
+function isKnockoutMatchDecided(
+  match: Pick<Match, "is_finished" | "is_locked" | "result_a" | "result_b">
+): boolean {
+  if (match.is_finished) return true;
+  return (
+    Boolean(match.is_locked) &&
+    match.result_a !== null &&
+    match.result_b !== null
+  );
+}
+
 /** `predicted_winner_id` / `winner_id` en BD suelen ser FK de slot; comparar también con IDs resueltos. */
 function pickTeamFromStoredWinnerId(
   storedWinnerId: number | null | undefined,
@@ -171,37 +183,6 @@ function getMatchWinnerTeam(
   predictions: Prediction[],
   displaySource: DisplaySource
 ): Team | undefined {
-  if (displaySource === "real" && match.is_finished) {
-    const resolvedA = resolveSlotTeam(
-      match.team_a,
-      match.id,
-      matchMap,
-      placeholderMap,
-      predictions,
-      displaySource
-    );
-    const resolvedB = resolveSlotTeam(
-      match.team_b,
-      match.id,
-      matchMap,
-      placeholderMap,
-      predictions,
-      displaySource
-    );
-    const officialWinnerId = getKnockoutOfficialWinnerTeamId(match, {
-      team_a_id: resolvedA?.id ?? match.team_a_id,
-      team_b_id: resolvedB?.id ?? match.team_b_id,
-      team_a: resolvedA,
-      team_b: resolvedB,
-      knockout_slot_a_id: match.team_a_id,
-      knockout_slot_b_id: match.team_b_id,
-    });
-    if (officialWinnerId == null) return undefined;
-    if (resolvedA?.id === officialWinnerId) return resolvedA;
-    if (resolvedB?.id === officialWinnerId) return resolvedB;
-    return undefined;
-  }
-
   const resolvedA = resolveSlotTeam(
     match.team_a,
     match.id,
@@ -219,6 +200,31 @@ function getMatchWinnerTeam(
     displaySource
   );
 
+  const resolvedForWinner = {
+    team_a_id: resolvedA?.id ?? match.team_a_id,
+    team_b_id: resolvedB?.id ?? match.team_b_id,
+    team_a: resolvedA,
+    team_b: resolvedB,
+    knockout_slot_a_id: match.team_a_id,
+    knockout_slot_b_id: match.team_b_id,
+  };
+
+  // Partido con resultado real: siempre ganador oficial (evita pronósticos viejos con IDs de slot)
+  if (isKnockoutMatchDecided(match)) {
+    const officialWinnerId = getKnockoutOfficialWinnerTeamId(
+      match,
+      resolvedForWinner
+    );
+    if (officialWinnerId == null) return undefined;
+    if (resolvedA?.id === officialWinnerId) return resolvedA;
+    if (resolvedB?.id === officialWinnerId) return resolvedB;
+    return undefined;
+  }
+
+  if (displaySource === "real") {
+    return undefined;
+  }
+
   const pred = predictions.find((p) => p.match_id === match.id);
   if (
     pred &&
@@ -234,21 +240,6 @@ function getMatchWinnerTeam(
       resolvedB
     );
     if (fromPenaltyPick) return fromPenaltyPick;
-  }
-
-  // Sin pronóstico (o empate sin ganador elegido): ganador real si el partido ya cerró
-  if (displaySource === "predicted" && match.is_finished) {
-    const officialWinnerId = getKnockoutOfficialWinnerTeamId(match, {
-      team_a_id: resolvedA?.id ?? match.team_a_id,
-      team_b_id: resolvedB?.id ?? match.team_b_id,
-      team_a: resolvedA,
-      team_b: resolvedB,
-      knockout_slot_a_id: match.team_a_id,
-      knockout_slot_b_id: match.team_b_id,
-    });
-    if (officialWinnerId == null) return undefined;
-    if (resolvedA?.id === officialWinnerId) return resolvedA;
-    if (resolvedB?.id === officialWinnerId) return resolvedB;
   }
 
   return undefined;
@@ -333,7 +324,7 @@ function resolveSlotFromDefinition(
 
   if (slot.kind === "winner") {
     const prev = matchMap.get(slot.fromMatchId);
-    if (prev?.is_finished && displaySource === "real") {
+    if (prev && isKnockoutMatchDecided(prev) && displaySource === "real") {
       const team = getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, "real");
       if (team) return { team, code, label, source: "confirmed" };
     }
@@ -348,7 +339,7 @@ function resolveSlotFromDefinition(
 
   if (slot.kind === "loser") {
     const prev = matchMap.get(slot.fromMatchId);
-    if (displaySource === "real" && !prev?.is_finished) {
+    if (displaySource === "real" && prev && !isKnockoutMatchDecided(prev)) {
       return { team: undefined, code, label, source: "placeholder" };
     }
     if (prev) {
@@ -372,7 +363,11 @@ function resolveSlotFromDefinition(
       if (winner && resolvedA && resolvedB) {
         const loser = winner.id === resolvedA.id ? resolvedB : resolvedA;
         const source: SlotSource =
-          prev.is_finished && displaySource === "real" ? "confirmed" : loser ? "predicted" : "placeholder";
+          isKnockoutMatchDecided(prev) && displaySource === "real"
+            ? "confirmed"
+            : loser
+              ? "predicted"
+              : "placeholder";
         return { team: loser, code, label, source };
       }
     }
@@ -523,8 +518,8 @@ export function resolveKnockoutBracket(input: ResolveKnockoutInput): KnockoutMat
 
 /**
  * Equipo mostrado en cada bando del cruce (octavos → final), en este orden:
- * 1. Pronóstico del partido alimentador (fase anterior), si existe.
- * 2. Ganador oficial de ese partido, si ya hay resultado real y no hay pronóstico.
+ * 1. Ganador oficial si el partido alimentador ya cerró.
+ * 2. Pronóstico si el partido sigue abierto y el usuario predijo.
  * 3. Sin equipo → etiqueta del cruce (p. ej. "Ganador partido 89") sin bandera.
  */
 function mergeDisplaySlots(
@@ -535,19 +530,19 @@ function mergeDisplaySlots(
   const officialTeam =
     realSlot?.source === "confirmed" ? realSlot.displayTeam : undefined;
 
-  const displayTeam = predictedTeam ?? officialTeam;
+  const displayTeam = officialTeam ?? predictedTeam;
 
   const officialTeamHint =
     officialTeam &&
     predictedTeam &&
     officialTeam.id !== predictedTeam.id
-      ? officialTeam
+      ? predictedTeam
       : undefined;
 
-  const source: SlotSource = predictedTeam
-    ? "predicted"
-    : officialTeam
-      ? "confirmed"
+  const source: SlotSource = officialTeam
+    ? "confirmed"
+    : predictedTeam
+      ? "predicted"
       : "placeholder";
 
   return {

@@ -78,10 +78,10 @@ export function viewModelToMatchCard(vm: KnockoutMatchViewModel): MatchCardExtra
     is_confirmed_a: Boolean(displayA),
     is_confirmed_b: Boolean(displayB),
     ghost_team_a: vm.slotA.officialTeam
-      ? `Resultado real: ${vm.slotA.officialTeam.name}`
+      ? `Tu pronóstico: ${vm.slotA.officialTeam.name}`
       : undefined,
     ghost_team_b: vm.slotB.officialTeam
-      ? `Resultado real: ${vm.slotB.officialTeam.name}`
+      ? `Tu pronóstico: ${vm.slotB.officialTeam.name}`
       : undefined,
   };
 }
