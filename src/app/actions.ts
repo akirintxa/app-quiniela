@@ -6,6 +6,7 @@ import {
   createServiceRoleClient,
   tryCreateServiceRoleClient,
 } from '@/utils/supabase/admin';
+import { randomResultForMatch } from '@/lib/admin-random-scores';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
 import { calculatePoints } from '@/lib/points';
 import { isTournamentStarted } from '@/lib/tournament';
@@ -767,5 +768,93 @@ export async function resetMatch(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Error al reiniciar' };
+  }
+}
+
+export type AdminRandomizePhaseParams =
+  | { section: 'groups' }
+  | { section: 'knockout'; stage: string };
+
+export type AdminRandomizePhaseResult =
+  | { ok: true; finalized: number; skipped: number }
+  | { ok: false; error: string };
+
+/** Finaliza todos los partidos pendientes de una fase con marcadores aleatorios (solo pruebas). */
+export async function randomizePhaseResults(
+  params: AdminRandomizePhaseParams
+): Promise<AdminRandomizePhaseResult> {
+  try {
+    const supabase = await getAdminDb();
+
+    let query = supabase
+      .from('matches')
+      .select('*')
+      .eq('is_finished', false);
+
+    if (params.section === 'groups') {
+      query = query.eq('stage', 'group');
+    } else {
+      query = query.eq('stage', params.stage);
+    }
+
+    const { data: matches, error: fetchError } = await query;
+    if (fetchError) return { ok: false, error: fetchError.message };
+    if (!matches?.length) {
+      return { ok: true, finalized: 0, skipped: 0 };
+    }
+
+    let finalized = 0;
+    let skipped = 0;
+
+    for (const row of matches) {
+      const match = row as Match;
+      if (!match.team_a_id || !match.team_b_id) {
+        skipped += 1;
+        continue;
+      }
+
+      const { resultA, resultB, winnerId } = randomResultForMatch(match);
+      const resolvedWinner = resolveKnockoutWinnerId(
+        match,
+        resultA,
+        resultB,
+        winnerId
+      );
+
+      if (match.stage !== 'group' && resultA === resultB && !resolvedWinner) {
+        skipped += 1;
+        continue;
+      }
+
+      const { data: updated, error: updateError } = await supabase
+        .from('matches')
+        .update({
+          result_a: resultA,
+          result_b: resultB,
+          winner_id: resolvedWinner,
+          is_locked: true,
+          is_finished: true,
+        })
+        .eq('id', match.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        return { ok: false, error: updateError.message };
+      }
+
+      if (updated) {
+        await updatePredictionsPoints(supabase, match.id, updated as Match);
+      }
+      finalized += 1;
+    }
+
+    revalidateAfterMatchUpdate();
+    return { ok: true, finalized, skipped };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Error al generar resultados',
+    };
   }
 }

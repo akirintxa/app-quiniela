@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
+import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Metadata } from "next";
@@ -41,6 +42,8 @@ export default async function AdminPage({
 
   let matches: Match[] | null = null;
   let error: { message: string } | null = null;
+  let phasePendingCount = 0;
+  let randomizePhaseLabel = "";
 
   if (section === "groups") {
     const res = await supabase
@@ -50,6 +53,14 @@ export default async function AdminPage({
       .order("start_time", { ascending: true });
     matches = res.data as Match[] | null;
     error = res.error;
+
+    const { count } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("stage", "group")
+      .eq("is_finished", false);
+    phasePendingCount = count ?? 0;
+    randomizePhaseLabel = "fase de grupos";
   } else {
     const res = await supabase
       .from("matches")
@@ -58,6 +69,15 @@ export default async function AdminPage({
       .order("start_time", { ascending: true });
     matches = res.data as Match[] | null;
     error = res.error;
+
+    const { count } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("stage", selectedStage)
+      .eq("is_finished", false);
+    phasePendingCount = count ?? 0;
+    randomizePhaseLabel =
+      KNOCKOUT_STAGES.find((s) => s.id === selectedStage)?.label ?? selectedStage;
   }
 
   return (
@@ -134,6 +154,19 @@ export default async function AdminPage({
         {error && (
           <p className="mb-4 text-red-500 text-sm font-bold">{error.message}</p>
         )}
+
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
+          <p className="text-[9px] font-bold text-amber-800/70 dark:text-amber-400/70 uppercase tracking-widest max-w-md leading-relaxed">
+            Pruebas: finaliza todos los partidos pendientes de la fase con marcadores aleatorios.
+          </p>
+          <AdminRandomizePhaseButton
+            {...(section === "groups"
+              ? { section: "groups" as const }
+              : { section: "knockout" as const, stage: selectedStage })}
+            label={randomizePhaseLabel}
+            pendingCount={phasePendingCount}
+          />
+        </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
           <div className="divide-y divide-gray-50 dark:divide-zinc-800">

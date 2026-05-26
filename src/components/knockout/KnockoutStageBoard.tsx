@@ -16,11 +16,14 @@ import {
   isDraftDirty,
   isDraftValid,
   MatchDraft,
-  viewModelToMatchCard,
 } from "@/lib/knockout-ui";
 import KnockoutMatchCard from "./KnockoutMatchCard";
 
+const AUTO_SAVE_DEBOUNCE_MS = 600;
+
 type DraftUpdate = Pick<MatchDraft, "scoreA" | "scoreB" | "winnerId">;
+
+type StageSaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 interface KnockoutStageContextValue {
   drafts: Record<number, MatchDraft>;
@@ -54,8 +57,7 @@ export default function KnockoutStageBoard({
     }
     return init;
   });
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<"idle" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<StageSaveStatus>("idle");
 
   useEffect(() => {
     setDrafts(() => {
@@ -65,6 +67,7 @@ export default function KnockoutStageBoard({
       }
       return next;
     });
+    setSaveStatus("idle");
   }, [viewModels]);
 
   const updateDraft = useCallback((matchId: number, update: DraftUpdate) => {
@@ -72,7 +75,7 @@ export default function KnockoutStageBoard({
       ...prev,
       [matchId]: { ...prev[matchId], ...update },
     }));
-    setFeedback("idle");
+    setSaveStatus((s) => (s === "saved" ? "idle" : s));
   }, []);
 
   const dirtyItems = useMemo(() => {
@@ -85,14 +88,25 @@ export default function KnockoutStageBoard({
 
   const dirtyCount = dirtyItems.length;
 
-  const handleSaveAll = async () => {
-    if (!userId || dirtyCount === 0) return;
-    setSaving(true);
-    setFeedback("idle");
+  const dirtySignature = useMemo(
+    () =>
+      dirtyItems
+        .map((vm) => {
+          const d = drafts[vm.match.id]!;
+          return `${vm.match.id}:${d.scoreA}:${d.scoreB}:${d.winnerId ?? ""}`;
+        })
+        .sort()
+        .join("|"),
+    [dirtyItems, drafts]
+  );
+
+  const persistDirty = useCallback(async () => {
+    if (!userId || dirtyItems.length === 0) return;
+
+    setSaveStatus("saving");
     try {
       const payload = dirtyItems.map((vm) => {
         const d = drafts[vm.match.id]!;
-        const match = viewModelToMatchCard(vm);
         return {
           matchId: vm.match.id,
           scoreA: Number(d.scoreA),
@@ -117,16 +131,54 @@ export default function KnockoutStageBoard({
         }
         return next;
       });
-      setFeedback("saved");
+      setSaveStatus("saved");
       router.refresh();
-      setTimeout(() => setFeedback("idle"), 2500);
+      setTimeout(() => setSaveStatus("idle"), 2500);
     } catch {
-      setFeedback("error");
-      alert("Error al guardar la fase. Inténtalo de nuevo.");
-    } finally {
-      setSaving(false);
+      setSaveStatus("error");
     }
-  };
+  }, [dirtyItems, drafts, router, userId]);
+
+  useEffect(() => {
+    if (!userId || dirtyCount === 0) {
+      setSaveStatus((s) => (s === "pending" ? "idle" : s));
+      return;
+    }
+
+    setSaveStatus("pending");
+    const timer = setTimeout(() => {
+      void persistDirty();
+    }, AUTO_SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [dirtySignature, dirtyCount, userId, persistDirty]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (
+        dirtyCount > 0 ||
+        saveStatus === "pending" ||
+        saveStatus === "saving"
+      ) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [userId, dirtyCount, saveStatus]);
+
+  const statusMessage = (() => {
+    if (saveStatus === "saving") return "Guardando fase…";
+    if (saveStatus === "pending")
+      return `${dirtyCount} cambio${dirtyCount !== 1 ? "s" : ""} — guardando en breve…`;
+    if (saveStatus === "saved") return "Fase guardada";
+    if (saveStatus === "error")
+      return "Error al guardar — se reintentará al editar";
+    if (dirtyCount > 0)
+      return `${dirtyCount} partido${dirtyCount !== 1 ? "s" : ""} con cambios pendientes`;
+    return "Autoguardado activo · sin cambios pendientes";
+  })();
 
   return (
     <KnockoutStageContext.Provider value={{ drafts, updateDraft }}>
@@ -136,30 +188,29 @@ export default function KnockoutStageBoard({
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-900 dark:text-white">
               {stageLabel}
             </p>
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-              {dirtyCount > 0
-                ? `${dirtyCount} partido${dirtyCount !== 1 ? "s" : ""} con cambios sin guardar`
-                : "Sin cambios pendientes"}
+            <p
+              className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${
+                saveStatus === "error"
+                  ? "text-red-500"
+                  : saveStatus === "saved"
+                    ? "text-green-600"
+                    : saveStatus === "pending" || saveStatus === "saving"
+                      ? "text-blue-500"
+                      : "text-gray-400"
+              }`}
+            >
+              {statusMessage}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleSaveAll}
-            disabled={saving || dirtyCount === 0}
-            className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-lg ${
-              feedback === "saved"
-                ? "bg-green-500 text-white shadow-green-500/20"
-                : dirtyCount === 0
-                  ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 cursor-default shadow-none"
-                  : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 active:scale-95"
-            }`}
-          >
-            {saving
-              ? "Guardando..."
-              : feedback === "saved"
-                ? "¡Fase guardada!"
-                : `Guardar fase (${dirtyCount})`}
-          </button>
+          {saveStatus === "error" && dirtyCount > 0 && (
+            <button
+              type="button"
+              onClick={() => void persistDirty()}
+              className="px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] bg-red-600 text-white hover:bg-red-700"
+            >
+              Reintentar ahora
+            </button>
+          )}
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
