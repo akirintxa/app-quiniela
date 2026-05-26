@@ -365,6 +365,87 @@ export async function leavePool(poolId: number) {
   revalidatePath(`/groups/${poolId}`);
 }
 
+async function assertCanManagePool(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  poolId: number,
+  userId: string
+) {
+  const { data: pool } = await supabase
+    .from("pools")
+    .select("creator_id")
+    .eq("id", poolId)
+    .maybeSingle();
+
+  if (pool?.creator_id === userId) return;
+
+  const { data: membership } = await supabase
+    .from("pool_members")
+    .select("role")
+    .eq("pool_id", poolId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!membership || membership.role !== "admin") {
+    throw new Error("No tienes permiso para administrar esta liga");
+  }
+}
+
+// USER: Rename Pool (Creator/Admin)
+export async function renamePool(poolId: number, name: string) {
+  const next = (name || "").trim();
+  if (!next) throw new Error("El nombre de la liga es obligatorio");
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Debes iniciar sesión");
+
+  await assertCanManagePool(supabase, poolId, user.id);
+
+  const { error } = await supabase
+    .from("pools")
+    .update({ name: next })
+    .eq("id", poolId);
+
+  if (error) throw error;
+
+  revalidatePath("/groups");
+  revalidatePath(`/groups/${poolId}`);
+}
+
+// USER: Kick Pool Member (Creator/Admin)
+export async function kickPoolMember(poolId: number, memberUserId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Debes iniciar sesión");
+
+  if (memberUserId === user.id) {
+    throw new Error("No puedes expulsarte a ti mismo");
+  }
+
+  await assertCanManagePool(supabase, poolId, user.id);
+
+  const { data: pool } = await supabase
+    .from("pools")
+    .select("creator_id")
+    .eq("id", poolId)
+    .maybeSingle();
+
+  if (pool?.creator_id && pool.creator_id === memberUserId) {
+    throw new Error("No puedes expulsar al creador de la liga");
+  }
+
+  const { error } = await supabase
+    .from("pool_members")
+    .delete()
+    .eq("pool_id", poolId)
+    .eq("user_id", memberUserId);
+
+  if (error) throw error;
+
+  revalidatePath("/groups");
+  revalidatePath(`/groups/${poolId}`);
+}
+
 // USER: Delete Pool (Only for Creator)
 export async function deletePool(poolId: number) {
   const supabase = await createClient();

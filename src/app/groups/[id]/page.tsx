@@ -8,6 +8,7 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import DeletePoolButton from "@/components/DeletePoolButton";
+import LeagueAdminPanel from "@/components/LeagueAdminPanel";
 import { calculateStandings } from "@/lib/standings";
 import { resolveKnockoutTeams } from "@/lib/knockout";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
@@ -96,6 +97,7 @@ export default async function GroupDetailPage({
   if (!membership) redirect("/groups?error=not-a-member");
 
   const isCreator = pool.creator_id === user.id;
+  const isAdmin = isCreator || membership.role === "admin";
 
   const { data: membersData } = await supabase
     .from("pool_members")
@@ -535,6 +537,16 @@ export default async function GroupDetailPage({
             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-4">
               Competición Privada • {memberIds.length} Jugadores
             </p>
+          </div>
+          <div className="flex items-center gap-3 justify-start md:justify-end">
+            <LeagueAdminPanel
+              poolId={Number(poolId)}
+              poolName={pool.name}
+              isAdmin={isAdmin}
+              myUserId={user.id}
+              creatorId={pool.creator_id}
+              members={poolMembers}
+            />
           </div>
         </header>
 
