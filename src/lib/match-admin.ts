@@ -1,4 +1,4 @@
-import type { Match } from "@/types";
+import type { Match, Prediction } from "@/types";
 
 export type KnockoutResolvedForWinner = Pick<
   Match,
@@ -71,6 +71,70 @@ export function getKnockoutOfficialWinnerTeamId(
   if (!Number.isNaN(slotA) && w === slotA) return resolvedKnockoutSideNationalId(resolved, "a");
   if (!Number.isNaN(slotB) && w === slotB) return resolvedKnockoutSideNationalId(resolved, "b");
 
+  return null;
+}
+
+/** Convierte `predicted_winner_id` / `winner_id` (a menudo FK de slot) al id nacional del bando ganador. */
+export function resolveStoredKnockoutWinnerToNationalId(
+  storedWinnerId: number | null | undefined,
+  raw: Pick<Match, "team_a_id" | "team_b_id">,
+  resolved: KnockoutResolvedForWinner
+): number | null {
+  if (storedWinnerId == null) return null;
+  const w = Number(storedWinnerId);
+  if (Number.isNaN(w)) return null;
+
+  const aId = Number(resolved.team_a_id);
+  const bId = Number(resolved.team_b_id);
+  if (!Number.isNaN(aId) && w === aId) return resolvedKnockoutSideNationalId(resolved, "a");
+  if (!Number.isNaN(bId) && w === bId) return resolvedKnockoutSideNationalId(resolved, "b");
+
+  const taId = resolved.team_a?.id != null ? Number(resolved.team_a.id) : NaN;
+  const tbId = resolved.team_b?.id != null ? Number(resolved.team_b.id) : NaN;
+  if (!Number.isNaN(taId) && w === taId) return resolvedKnockoutSideNationalId(resolved, "a");
+  if (!Number.isNaN(tbId) && w === tbId) return resolvedKnockoutSideNationalId(resolved, "b");
+
+  const slotA =
+    resolved.knockout_slot_a_id != null
+      ? Number(resolved.knockout_slot_a_id)
+      : Number(raw.team_a_id);
+  const slotB =
+    resolved.knockout_slot_b_id != null
+      ? Number(resolved.knockout_slot_b_id)
+      : Number(raw.team_b_id);
+  if (!Number.isNaN(slotA) && w === slotA) return resolvedKnockoutSideNationalId(resolved, "a");
+  if (!Number.isNaN(slotB) && w === slotB) return resolvedKnockoutSideNationalId(resolved, "b");
+
+  const rawA = Number(raw.team_a_id);
+  const rawB = Number(raw.team_b_id);
+  if (!Number.isNaN(rawA) && w === rawA) return resolvedKnockoutSideNationalId(resolved, "a");
+  if (!Number.isNaN(rawB) && w === rawB) return resolvedKnockoutSideNationalId(resolved, "b");
+
+  return null;
+}
+
+/** Ganador pronosticado en KO usando marcador + penales (ids nacionales, no FK de slot). */
+export function resolvePredictedKnockoutWinnerNationalId(
+  prediction: Pick<Prediction, "predicted_a" | "predicted_b" | "predicted_winner_id">,
+  raw: Pick<Match, "team_a_id" | "team_b_id">,
+  resolved: KnockoutResolvedForWinner | null | undefined
+): number | null {
+  if (!resolved) return null;
+  if (prediction.predicted_a === null || prediction.predicted_b === null) return null;
+
+  const pA = Number(prediction.predicted_a);
+  const pB = Number(prediction.predicted_b);
+  if (Number.isNaN(pA) || Number.isNaN(pB)) return null;
+
+  if (pA > pB) return resolvedKnockoutSideNationalId(resolved, "a");
+  if (pB > pA) return resolvedKnockoutSideNationalId(resolved, "b");
+  if (pA === pB) {
+    return resolveStoredKnockoutWinnerToNationalId(
+      prediction.predicted_winner_id,
+      raw,
+      resolved
+    );
+  }
   return null;
 }
 

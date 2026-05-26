@@ -3,6 +3,7 @@ import {
   FAVORITE_BONUS_RULES,
   HISTORY_BONUS_PHASES,
   getFavoriteBonusPointsForHistoryPhase,
+  type FavoriteBonusKey,
   type HistoryBonusPhaseKey,
 } from "./favorite-bonus";
 import {
@@ -78,6 +79,16 @@ export function formatHistoryMatchLabel(
   const teamA = resolved?.teamAName ?? match.team_a?.name ?? "Equipo A";
   const teamB = resolved?.teamBName ?? match.team_b?.name ?? "Equipo B";
   return `${phase} — ${teamA} vs ${teamB}`;
+}
+
+function bonusHistoryResultLabel(
+  bonusKey: FavoriteBonusKey,
+  bonusPts: number
+): string {
+  if (bonusKey === "final_winner") {
+    return bonusPts > 0 ? "Campeón acertado" : "Campeón no acertado";
+  }
+  return bonusPts > 0 ? "Clasificó" : "No clasificó";
 }
 
 function getPhaseKeyForMatch(match: Match): HistoryBonusPhaseKey | null {
@@ -220,7 +231,7 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
             kind: "bonus",
             match: `Bono favorito · ${phaseDef.shortLabel}`,
             pred: favLabel,
-            res: bonusPts > 0 ? "Clasificó" : "No clasificó",
+            res: bonusHistoryResultLabel(phaseDef.bonusKey, bonusPts),
             pts: bonusPts,
             breakdown: rule?.label ?? "",
             total: cumulative,

@@ -2,7 +2,7 @@ import { Match, Prediction, Team } from "@/types";
 import { calculateStandings } from "./standings";
 import {
   getKnockoutOfficialWinnerTeamId,
-  resolvedKnockoutSideNationalId,
+  resolvePredictedKnockoutWinnerNationalId,
   type KnockoutResolvedForWinner,
 } from "./match-admin";
 import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
@@ -118,31 +118,6 @@ function teamQualifiedToRoundOf16(
   return false;
 }
 
-function predictedFinalWinner(
-  prediction: Prediction,
-  rawFinal: Match,
-  resolved: KnockoutResolvedForWinner | null | undefined
-): number | null {
-  if (prediction.predicted_winner_id != null) {
-    return Number(prediction.predicted_winner_id);
-  }
-  if (prediction.predicted_a === null || prediction.predicted_b === null) {
-    return null;
-  }
-  const pA = Number(prediction.predicted_a);
-  const pB = Number(prediction.predicted_b);
-  if (pA === pB) return null;
-
-  if (resolved) {
-    if (pA > pB) return resolvedKnockoutSideNationalId(resolved, "a");
-    if (pB > pA) return resolvedKnockoutSideNationalId(resolved, "b");
-  }
-
-  if (pA > pB) return rawFinal.team_a_id;
-  if (pB > pA) return rawFinal.team_b_id;
-  return null;
-}
-
 export function calculateFavoriteTeamBonuses(
   favoriteTeamId: number | null | undefined,
   options: {
@@ -198,7 +173,7 @@ export function calculateFavoriteTeamBonuses(
   if (finalMatch && options.finalPrediction) {
     const resolvedFinal = resolvedKoById.get(finalMatch.id);
     const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
-    const predicted = predictedFinalWinner(
+    const predicted = resolvePredictedKnockoutWinnerNationalId(
       options.finalPrediction,
       finalMatch,
       resolvedFinal
@@ -316,7 +291,7 @@ export function getFavoriteBonusPointsForHistoryPhase(
       if (!finalMatch || !options.finalPrediction) return 0;
       const resolvedFinal = resolvedKoById.get(finalMatch.id);
       const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
-      const predicted = predictedFinalWinner(
+      const predicted = resolvePredictedKnockoutWinnerNationalId(
         options.finalPrediction,
         finalMatch,
         resolvedFinal
