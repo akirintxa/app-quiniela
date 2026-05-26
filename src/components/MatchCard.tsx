@@ -20,6 +20,8 @@ interface MatchCardProps {
     bracket_label_b?: string;
     is_confirmed_a?: boolean;
     is_confirmed_b?: boolean;
+    is_projected_a?: boolean;
+    is_projected_b?: boolean;
     ghost_team_a?: string;
     ghost_team_b?: string;
   };
@@ -105,8 +107,12 @@ export default function MatchCard({
 
   const slotLabelA = match.bracket_label_a;
   const slotLabelB = match.bracket_label_b;
-  const showBracketSlotA = isKnockout && Boolean(slotLabelA && !match.is_confirmed_a);
-  const showBracketSlotB = isKnockout && Boolean(slotLabelB && !match.is_confirmed_b);
+  const slotResolvedA =
+    Boolean(match.is_confirmed_a) || Boolean(match.is_projected_a);
+  const slotResolvedB =
+    Boolean(match.is_confirmed_b) || Boolean(match.is_projected_b);
+  const showBracketSlotA = isKnockout && Boolean(slotLabelA) && !slotResolvedA;
+  const showBracketSlotB = isKnockout && Boolean(slotLabelB) && !slotResolvedB;
 
   const teamAName = showBracketSlotA
     ? slotLabelA!
@@ -308,7 +314,21 @@ export default function MatchCard({
     </div>
   );
 
-  const TeamIcon = ({ team, isSelected, isConfirmed, bracketOnly, bracketLabel }: { team: any, isSelected?: boolean, isConfirmed?: boolean, bracketOnly?: boolean, bracketLabel?: string }) => {
+  const TeamIcon = ({
+    team,
+    isSelected,
+    isConfirmed,
+    isProjected,
+    bracketOnly,
+    bracketLabel,
+  }: {
+    team: { name: string; iso_code?: string } | null | undefined;
+    isSelected?: boolean;
+    isConfirmed?: boolean;
+    isProjected?: boolean;
+    bracketOnly?: boolean;
+    bracketLabel?: string;
+  }) => {
     if (bracketOnly && bracketLabel) {
       return (
         <div className="relative group/icon">
@@ -328,8 +348,13 @@ export default function MatchCard({
             }} />
           ) : <BallIcon />}
         </div>
-        {isKnockout && (
-          <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center shadow-sm ${isConfirmed ? 'bg-green-500' : 'bg-blue-400 animate-pulse'}`} title={isConfirmed ? 'Confirmado' : 'Proyectado'}>
+        {isKnockout && team && (isConfirmed || isProjected) && (
+          <div
+            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center shadow-sm ${
+              isConfirmed ? "bg-green-500" : "bg-blue-400 animate-pulse"
+            }`}
+            title={isConfirmed ? "Clasificado (oficial)" : "Clasificado (tu pronóstico)"}
+          >
             {isConfirmed ? (
               <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             ) : (
@@ -405,7 +430,7 @@ export default function MatchCard({
               onClick={() => patchScores({ winnerId: match.team_a_id })}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} bracketOnly={showBracketSlotA} bracketLabel={slotLabelA} />
+              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} isProjected={match.is_projected_a} bracketOnly={showBracketSlotA} bracketLabel={slotLabelA} />
               <div className={`flex flex-col items-center justify-center ${showBracketSlotA ? "min-h-0" : "h-8"}`}>
                 {!showBracketSlotA && (
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
@@ -450,7 +475,7 @@ export default function MatchCard({
               onClick={() => patchScores({ winnerId: match.team_b_id })}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} bracketOnly={showBracketSlotB} bracketLabel={slotLabelB} />
+              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} isProjected={match.is_projected_b} bracketOnly={showBracketSlotB} bracketLabel={slotLabelB} />
               <div className={`flex flex-col items-center justify-center ${showBracketSlotB ? "min-h-0" : "h-8"}`}>
                 {!showBracketSlotB && (
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>

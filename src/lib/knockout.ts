@@ -620,6 +620,8 @@ export function resolveKnockoutTeams(
     placeholder_b: vm.slotB.placeholderCode,
     is_confirmed_a: vm.slotA.source === "confirmed",
     is_confirmed_b: vm.slotB.source === "confirmed",
+    is_projected_a: vm.slotA.source === "predicted",
+    is_projected_b: vm.slotB.source === "predicted",
   })) as Match[];
 }
 

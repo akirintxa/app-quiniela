@@ -12,6 +12,9 @@ export type MatchCardExtras = Match & {
   bracket_label_b?: string;
   is_confirmed_a?: boolean;
   is_confirmed_b?: boolean;
+  /** Equipo en slot por pronóstico (punto azul en bandera). */
+  is_projected_a?: boolean;
+  is_projected_b?: boolean;
   ghost_team_a?: string;
   ghost_team_b?: string;
 };
@@ -74,9 +77,10 @@ export function viewModelToMatchCard(vm: KnockoutMatchViewModel): MatchCardExtra
     placeholder_b: vm.slotB.placeholderCode,
     bracket_label_a: vm.slotA.placeholderLabel,
     bracket_label_b: vm.slotB.placeholderLabel,
-    // Con equipo resuelto (pronóstico o real) → bandera; si no → texto del cruce sin bandera
-    is_confirmed_a: Boolean(displayA),
-    is_confirmed_b: Boolean(displayB),
+    is_confirmed_a: vm.slotA.source === "confirmed",
+    is_confirmed_b: vm.slotB.source === "confirmed",
+    is_projected_a: vm.slotA.source === "predicted",
+    is_projected_b: vm.slotB.source === "predicted",
     ghost_team_a: vm.slotA.officialTeam
       ? `Tu pronóstico: ${vm.slotA.officialTeam.name}`
       : undefined,
