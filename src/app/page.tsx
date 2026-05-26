@@ -254,10 +254,18 @@ export default async function Home({
     ) as Match[];
   }
 
-  // Resolve knockout teams for Today/Results views as well
+  // Resolve knockout teams for Today/Results views as well (necesita el bracket completo
+  // en matchMap para mostrar ganadores de fases previas en octavos, cuartos, etc.)
   if ((view === "today" || view === "results") && matches.length > 0) {
     if (allKnockoutMatches && allGroupMatches && allTeams) {
-      matches = resolveKnockoutTeams(matches, allGroupMatches as Match[], predictions, allTeams as Team[]);
+      const resolvedFull = resolveKnockoutTeams(
+        allKnockoutMatches as Match[],
+        allGroupMatches as Match[],
+        predictions,
+        allTeams as Team[]
+      ) as Match[];
+      const byId = new Map(resolvedFull.map((m) => [m.id, m]));
+      matches = matches.map((m) => byId.get(m.id) ?? m);
     }
   }
 

@@ -282,12 +282,20 @@ export default async function GroupDetailPage({
     const groupStageMatches = matches.filter((m) => m.stage === "group");
     const knockoutStageMatches = matches.filter((m) => m.stage !== "group");
     if (knockoutStageMatches.length > 0) {
-      const resolvedKo = resolveKnockoutTeamsForLeague(
-        knockoutStageMatches,
+      // Resolver el bracket con TODOS los KO (incl. ya cerrados): octavos/cuartos
+      // referencian ganadores de dieciseisavos vía matchMap; si solo pasamos próximos,
+      // no hay partidos previos y los nombres quedan vacíos.
+      const upcomingKoIds = new Set(knockoutStageMatches.map((m) => m.id));
+      const fullKnockout = ((allKnockoutMatches ?? []) as Match[]).length
+        ? ((allKnockoutMatches ?? []) as Match[])
+        : knockoutStageMatches;
+      const resolvedAll = resolveKnockoutTeamsForLeague(
+        fullKnockout,
         allGroupMatches as Match[],
         allTeams as Team[],
         (myPredictions || []) as Prediction[]
       );
+      const resolvedKo = resolvedAll.filter((m) => upcomingKoIds.has(m.id));
       matches = [...groupStageMatches, ...resolvedKo].sort(
         (a, b) =>
           new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
