@@ -6,7 +6,12 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { calculateStandings } from "@/lib/standings";
-import { buildKnockoutViewModels, getCompletedGroups, resolveKnockoutTeams } from "@/lib/knockout";
+import {
+  buildKnockoutViewModels,
+  getCompletedGroups,
+  getGroupsWithCompleteOfficialResults,
+  resolveKnockoutTeams,
+} from "@/lib/knockout";
 import HomeTabsHandler from "@/components/HomeTabsHandler";
 import KnockoutStageBoard from "@/components/knockout/KnockoutStageBoard";
 import { KnockoutMatchViewModel } from "@/types/knockout";
@@ -108,8 +113,6 @@ export default async function Home({
   const rawStage = resolvedSearchParams.stage || "round_32";
   const selectedStage = rawStage === "bracket" ? "round_32" : rawStage;
 
-  const { data: allMatchesSummary } = await supabase.from("matches").select("id, group_id, stage").eq('is_finished', false);
-
   let predictions: Prediction[] = [];
   let userStats = { points: 0, rank: 0, bonusPoints: 0 };
 
@@ -121,35 +124,45 @@ export default async function Home({
   userStats.bonusPoints = rankStats.bonusPoints;
   userStats.rank = rankStats.rank;
 
-  const groupCompletion: Record<string, boolean> = {};
   const allGroups = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
-  allGroups.forEach(gid => groupCompletion[gid] = false);
-
-  if (allMatchesSummary) {
-    const groupMap: Record<string, { total: number, predicted: number }> = {};
-    allMatchesSummary.forEach(m => {
-      if (m.stage === 'group') {
-        const gid = m.group_id || 'unknown';
-        if (!groupMap[gid]) groupMap[gid] = { total: 0, predicted: 0 };
-        groupMap[gid].total++;
-        if (predictions.some(p => p.match_id === m.id)) groupMap[gid].predicted++;
-      }
-    });
-    Object.keys(groupMap).forEach(gid => {
-      groupCompletion[gid] = groupMap[gid].predicted === groupMap[gid].total;
-    });
-  }
-
-  const incompleteGroups = allGroups.filter(gid => !groupCompletion[gid]);
-  const allGroupsComplete = incompleteGroups.length === 0;
 
   // --- FETCH DATA FOR RESOLUTION ---
   const { data: allTeams } = await supabase.from("teams").select("*");
   const { data: allGroupMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").eq("stage", "group");
   const { data: allKnockoutMatches } = await supabase.from("matches").select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)").neq("stage", "group");
 
+  const groupCompletion: Record<string, boolean> = {};
+  allGroups.forEach((gid) => {
+    groupCompletion[gid] = false;
+  });
+
+  if (allGroupMatches) {
+    const groupMap: Record<string, { total: number; predicted: number }> = {};
+    (allGroupMatches as Match[]).forEach((m) => {
+      if (m.stage === "group" && m.group_id) {
+        const gid = m.group_id;
+        if (!groupMap[gid]) groupMap[gid] = { total: 0, predicted: 0 };
+        groupMap[gid].total++;
+        const p = predictions.find((pr) => pr.match_id === m.id);
+        if (p?.predicted_a != null && p?.predicted_b != null) {
+          groupMap[gid].predicted++;
+        }
+      }
+    });
+    Object.keys(groupMap).forEach((gid) => {
+      groupCompletion[gid] = groupMap[gid].predicted === groupMap[gid].total;
+    });
+  }
+
+  const incompleteGroups = allGroups.filter((gid) => !groupCompletion[gid]);
+  const allGroupsComplete = incompleteGroups.length === 0;
+
   const completedGroupsCount = allGroupMatches
     ? getCompletedGroups(allGroupMatches as Match[], predictions).size
+    : 0;
+
+  const officiallyCompleteGroupsCount = allGroupMatches
+    ? getGroupsWithCompleteOfficialResults(allGroupMatches as Match[]).size
     : 0;
 
   let bestThirdsPredicted = EMPTY_BEST_THIRDS_VIEW;
@@ -403,9 +416,17 @@ export default async function Home({
               <div className="mb-6 px-4 py-3 rounded-2xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30">
                 <p className="text-[9px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-widest leading-relaxed">
                   {completedGroupsCount > 0
-                    ? `${completedGroupsCount} grupo${completedGroupsCount !== 1 ? "s" : ""} ya rellenan equipos en eliminatorias. `
+                    ? `${completedGroupsCount} grupo${completedGroupsCount !== 1 ? "s" : ""} ya rellenan equipos en eliminatorias (por predicción). `
                     : "Los cruces usan placeholders hasta que predigas los grupos. "}
                   Faltan {incompleteGroups.length} para completar todos los cruces y mejores terceros.
+                  {officiallyCompleteGroupsCount > 0 && (
+                    <>
+                      {" "}
+                      {officiallyCompleteGroupsCount} grupo
+                      {officiallyCompleteGroupsCount !== 1 ? "s" : ""} con resultados oficiales
+                      completos (clasificados reales en cruces).
+                    </>
+                  )}
                 </p>
                 <Link
                   href={`/?view=groups&group=${incompleteGroups[0] ?? "A"}`}

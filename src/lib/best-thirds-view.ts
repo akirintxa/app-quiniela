@@ -1,7 +1,11 @@
 import { Match, Prediction, Team } from "@/types";
 import { GroupId, StandingsMode } from "@/types/knockout";
 import { BRACKET_FIXTURES } from "./bracket-fixtures";
-import { computeGroupStandings, getCompletedGroups } from "./knockout";
+import {
+  computeGroupStandings,
+  getCompletedGroups,
+  getGroupsWithCompleteOfficialResults,
+} from "./knockout";
 import {
   buildThirdPlaceAssignment,
   rankBestThirdPlaces,
@@ -56,16 +60,6 @@ export const EMPTY_BEST_THIRDS_VIEW: BestThirdPlacesView = {
   qualifyingGroupLetters: [],
   hasOfficialGroupResults: false,
 };
-
-function groupHasFinishedResults(groupId: GroupId, groupMatches: Match[]): boolean {
-  return groupMatches.some(
-    (m) =>
-      m.group_id === groupId &&
-      m.is_finished &&
-      m.result_a !== null &&
-      m.result_b !== null
-  );
-}
 
 function collectThirdPlaces(
   standings: Record<GroupId, TeamStats[]>,
@@ -140,14 +134,15 @@ export function buildBestThirdPlacesView(
     mode
   );
 
-  const groupsWithRealResults = new Set<GroupId>(
-    GROUP_IDS.filter((gid) => groupHasFinishedResults(gid, groupMatches))
-  );
+  const officiallyCompleteGroups = getGroupsWithCompleteOfficialResults(groupMatches);
 
   const allowedGroups =
-    mode === "real" ? groupsWithRealResults : completedGroups;
+    mode === "real" ? officiallyCompleteGroups : completedGroups;
 
-  const rawThirds = collectThirdPlaces(standings, completedGroups, allowedGroups);
+  const groupsForThirds =
+    mode === "real" ? officiallyCompleteGroups : completedGroups;
+
+  const rawThirds = collectThirdPlaces(standings, groupsForThirds, allowedGroups);
   const ranked = rankBestThirdPlaces(rawThirds);
   const qualifying = ranked.slice(0, 8);
   const qualifyingSet = new Set(qualifying.map((s) => s.groupId));
@@ -177,6 +172,6 @@ export function buildBestThirdPlacesView(
     qualifyingGroupLetters: qualifying
       .map((s) => s.groupId)
       .filter(Boolean) as string[],
-    hasOfficialGroupResults: groupsWithRealResults.size > 0,
+    hasOfficialGroupResults: officiallyCompleteGroups.size > 0,
   };
 }

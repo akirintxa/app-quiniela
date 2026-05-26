@@ -21,7 +21,29 @@ import { calculateStandings, TeamStats } from "./standings";
 
 const GROUP_IDS: GroupId[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
 
-/** Grupos con todos los partidos (no finalizados) ya predichos */
+/** Grupo con todos los partidos de fase de grupos cerrados oficialmente */
+export function groupHasCompleteOfficialResults(
+  groupId: GroupId,
+  groupMatches: Match[]
+): boolean {
+  const inGroup = groupMatches.filter(
+    (m) => m.group_id === groupId && m.stage === "group"
+  );
+  if (inGroup.length === 0) return false;
+  return inGroup.every(
+    (m) => m.is_finished && m.result_a !== null && m.result_b !== null
+  );
+}
+
+export function getGroupsWithCompleteOfficialResults(
+  groupMatches: Match[]
+): Set<GroupId> {
+  return new Set(
+    GROUP_IDS.filter((gid) => groupHasCompleteOfficialResults(gid, groupMatches))
+  );
+}
+
+/** Grupos con predicción en todos los partidos de fase de grupos (incl. ya finalizados) */
 export function getCompletedGroups(
   allGroupMatches: Match[],
   userPredictions: Prediction[]
@@ -29,7 +51,7 @@ export function getCompletedGroups(
   const completed = new Set<GroupId>();
   GROUP_IDS.forEach((gid) => {
     const groupMatches = allGroupMatches.filter(
-      (m) => m.group_id === gid && m.stage === "group" && !m.is_finished
+      (m) => m.group_id === gid && m.stage === "group"
     );
     if (groupMatches.length === 0) return;
     const done = groupMatches.every((m) => {
@@ -84,16 +106,6 @@ export function computeGroupStandings(
   });
 
   return groupStandings as Record<GroupId, TeamStats[]>;
-}
-
-function groupHasFinishedResults(groupId: GroupId, groupMatches: Match[]): boolean {
-  return groupMatches.some(
-    (m) =>
-      m.group_id === groupId &&
-      m.is_finished &&
-      m.result_a !== null &&
-      m.result_b !== null
-  );
 }
 
 function buildPlaceholderMap(
@@ -276,6 +288,9 @@ function resolveSlotFromDefinition(
       const team = getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, "real");
       if (team) return { team, code, label, source: "confirmed" };
     }
+    if (displaySource === "real") {
+      return { team: undefined, code, label, source: "placeholder" };
+    }
     const team = prev
       ? getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, displaySource)
       : undefined;
@@ -284,6 +299,9 @@ function resolveSlotFromDefinition(
 
   if (slot.kind === "loser") {
     const prev = matchMap.get(slot.fromMatchId);
+    if (displaySource === "real" && !prev?.is_finished) {
+      return { team: undefined, code, label, source: "placeholder" };
+    }
     if (prev) {
       const winner = getMatchWinnerTeam(prev, matchMap, placeholderMap, predictions, displaySource);
       const resolvedA = resolveSlotTeam(
@@ -313,6 +331,9 @@ function resolveSlotFromDefinition(
   }
 
   const team = placeholderMap[code];
+  if (displaySource === "real" && team) {
+    return { team, code, label, source: "confirmed" };
+  }
   const source: SlotSource = team ? "predicted" : "placeholder";
   return { team, code, label, source };
 }
@@ -350,29 +371,29 @@ export function resolveKnockoutBracket(input: ResolveKnockoutInput): KnockoutMat
   );
 
   const completedGroups = getCompletedGroups(groupMatches, predictions);
+  const officiallyCompleteGroups = getGroupsWithCompleteOfficialResults(groupMatches);
 
-  const collectThirds = (standings: Record<GroupId, TeamStats[]>) => {
+  const collectThirds = (
+    standings: Record<GroupId, TeamStats[]>,
+    allowedGroups: Set<GroupId>
+  ) => {
     const thirds: TeamStats[] = [];
     GROUP_IDS.forEach((gid) => {
-      if (!completedGroups.has(gid)) return;
+      if (!allowedGroups.has(gid)) return;
       const s = standings[gid];
       if (s?.[2]) thirds.push({ ...s[2], groupId: gid });
     });
     return thirds;
   };
 
-  const realThirds = collectThirds(realStandings);
-  const predictedThirds = collectThirds(predictedStandings);
-
-  const groupsWithRealResults = new Set<GroupId>(
-    GROUP_IDS.filter((gid) => groupHasFinishedResults(gid, groupMatches))
-  );
+  const realThirds = collectThirds(realStandings, officiallyCompleteGroups);
+  const predictedThirds = collectThirds(predictedStandings, completedGroups);
 
   const { map: realMap, assignment: realAssignment } = buildPlaceholderMap(
     realStandings,
     realThirds,
-    completedGroups,
-    groupsWithRealResults
+    officiallyCompleteGroups,
+    officiallyCompleteGroups
   );
   const { map: predictedMap, assignment: predictedAssignment } = buildPlaceholderMap(
     predictedStandings,
