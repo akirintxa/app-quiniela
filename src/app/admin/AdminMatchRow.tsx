@@ -143,6 +143,14 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
     >
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
         <div className="flex flex-wrap items-center gap-4 min-w-0">
+          {isKnockout && (
+            <span
+              className="shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black tabular-nums tracking-tight bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600"
+              title="Número de partido (fixture eliminatorias)"
+            >
+              Partido {match.id}
+            </span>
+          )}
           <span
             className={`shrink-0 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${statusClass}`}
           >

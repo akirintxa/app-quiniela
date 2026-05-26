@@ -771,6 +771,65 @@ export async function resetMatch(
   }
 }
 
+export type AdminResetPhaseParams =
+  | { section: 'groups'; groupId: string }
+  | { section: 'knockout'; stage: string };
+
+export type AdminResetPhaseResult =
+  | { ok: true; reset: number }
+  | { ok: false; error: string };
+
+/** Borra marcadores y puntos de todos los partidos de la fase (solo admin / pruebas). */
+export async function resetPhaseResults(
+  params: AdminResetPhaseParams
+): Promise<AdminResetPhaseResult> {
+  try {
+    const supabase = await getAdminDb();
+
+    let query = supabase.from('matches').select('id');
+
+    if (params.section === 'groups') {
+      query = query.eq('stage', 'group').eq('group_id', params.groupId);
+    } else {
+      query = query.eq('stage', params.stage);
+    }
+
+    const { data: rows, error: fetchError } = await query;
+    if (fetchError) return { ok: false, error: fetchError.message };
+
+    const ids = (rows ?? []).map((r) => r.id as number);
+    if (ids.length === 0) return { ok: true, reset: 0 };
+
+    const { error: matchError } = await supabase
+      .from('matches')
+      .update({
+        result_a: null,
+        result_b: null,
+        winner_id: null,
+        is_locked: false,
+        is_finished: false,
+      })
+      .in('id', ids);
+
+    if (matchError) return { ok: false, error: matchError.message };
+
+    const { error: predError } = await supabase
+      .from('predictions')
+      .update({ points_won: null })
+      .in('match_id', ids);
+
+    if (predError) return { ok: false, error: predError.message };
+
+    revalidateAfterMatchUpdate();
+    return { ok: true, reset: ids.length };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Error al reiniciar la fase',
+    };
+  }
+}
+
 export type AdminRandomizePhaseParams =
   | { section: 'groups' }
   | { section: 'knockout'; stage: string };

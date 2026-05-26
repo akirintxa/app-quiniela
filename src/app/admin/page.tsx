@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
 import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
+import AdminResetPhaseButton from "./AdminResetPhaseButton";
 import AdminRefreshButton from "./AdminRefreshButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -81,6 +82,20 @@ export default async function AdminPage({
       KNOCKOUT_STAGES.find((s) => s.id === selectedStage)?.label ?? selectedStage;
   }
 
+  const phaseResettableCount =
+    matches?.filter(
+      (m) =>
+        m.is_finished ||
+        m.is_locked ||
+        m.result_a !== null ||
+        m.result_b !== null
+    ).length ?? 0;
+
+  const resetPhaseLabel =
+    section === "groups"
+      ? `grupo ${selectedGroup}`
+      : KNOCKOUT_STAGES.find((s) => s.id === selectedStage)?.label ?? selectedStage;
+
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
@@ -159,17 +174,29 @@ export default async function AdminPage({
           <p className="mb-4 text-red-500 text-sm font-bold">{error.message}</p>
         )}
 
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
-          <p className="text-[9px] font-bold text-amber-800/70 dark:text-amber-400/70 uppercase tracking-widest max-w-md leading-relaxed">
-            Pruebas: finaliza todos los partidos pendientes de la fase con marcadores aleatorios.
+        <div className="mb-6 flex flex-col gap-4 px-2">
+          <p className="text-[9px] font-bold text-amber-800/70 dark:text-amber-400/70 uppercase tracking-widest max-w-xl leading-relaxed">
+            Pruebas: aleatorizar pendientes · reiniciar toda la fase visible (marcador, cierre y puntos de esos partidos; no borra predicciones).
           </p>
-          <AdminRandomizePhaseButton
-            {...(section === "groups"
-              ? { section: "groups" as const }
-              : { section: "knockout" as const, stage: selectedStage })}
-            label={randomizePhaseLabel}
-            pendingCount={phasePendingCount}
-          />
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-end gap-4">
+            <AdminRandomizePhaseButton
+              {...(section === "groups"
+                ? { section: "groups" as const }
+                : { section: "knockout" as const, stage: selectedStage })}
+              label={randomizePhaseLabel}
+              pendingCount={phasePendingCount}
+            />
+            <AdminResetPhaseButton
+              {...(section === "groups"
+                ? {
+                    section: "groups" as const,
+                    groupId: selectedGroup,
+                  }
+                : { section: "knockout" as const, stage: selectedStage })}
+              label={resetPhaseLabel}
+              resettableCount={phaseResettableCount}
+            />
+          </div>
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
