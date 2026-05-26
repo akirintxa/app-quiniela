@@ -336,6 +336,15 @@ export default function MatchCard({
         </div>
       );
     }
+    if (!team) {
+      return (
+        <div className="relative group/icon">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700">
+            <BallIcon />
+          </div>
+        </div>
+      );
+    }
     const flag = getFlagUrl(team);
     return (
       <div className="relative group/icon">
