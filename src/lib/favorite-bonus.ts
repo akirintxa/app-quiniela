@@ -181,3 +181,82 @@ export function getTotalPointsWithFavoriteBonus(
 ): number {
   return matchPoints + favoriteBonus.total;
 }
+
+export type HistoryBonusPhaseKey =
+  | "groups"
+  | "round_32"
+  | "round_16"
+  | "quarter_final"
+  | "semi_final"
+  | "final";
+
+export const HISTORY_BONUS_PHASES: {
+  key: HistoryBonusPhaseKey;
+  stages: string[];
+  shortLabel: string;
+  bonusKey: FavoriteBonusKey;
+}[] = [
+  { key: "groups", stages: ["group"], shortLabel: "Grupos", bonusKey: "to_round_16" },
+  { key: "round_32", stages: ["round_32"], shortLabel: "16vos", bonusKey: "to_round_8" },
+  { key: "round_16", stages: ["round_16"], shortLabel: "8vos", bonusKey: "to_quarter" },
+  {
+    key: "quarter_final",
+    stages: ["quarter_final"],
+    shortLabel: "Cuartos",
+    bonusKey: "to_semi",
+  },
+  { key: "semi_final", stages: ["semi_final"], shortLabel: "Semis", bonusKey: "to_final" },
+  { key: "final", stages: ["final"], shortLabel: "Final", bonusKey: "final_winner" },
+];
+
+function matchHasOfficialResult(m: Match): boolean {
+  return m.result_a !== null && m.result_b !== null;
+}
+
+export function isHistoryPhaseOfficiallyComplete(
+  phase: (typeof HISTORY_BONUS_PHASES)[number],
+  allMatches: Match[]
+): boolean {
+  const inPhase = allMatches.filter((m) => phase.stages.includes(m.stage));
+  if (inPhase.length === 0) return false;
+  return inPhase.every(matchHasOfficialResult);
+}
+
+/** Puntos de bono favorito al cerrar una fase (0 si no aplica). null si la fase aún no termina. */
+export function getFavoriteBonusPointsForHistoryPhase(
+  favoriteTeamId: number | null | undefined,
+  phase: (typeof HISTORY_BONUS_PHASES)[number],
+  options: {
+    groupMatches: Match[];
+    knockoutMatches: Match[];
+    finalPrediction?: Prediction | null;
+  }
+): number | null {
+  const allMatches = [...options.groupMatches, ...options.knockoutMatches];
+  if (!isHistoryPhaseOfficiallyComplete(phase, allMatches)) return null;
+  if (!favoriteTeamId) return 0;
+
+  const finishedKnockout = options.knockoutMatches.filter(matchHasOfficialResult);
+
+  switch (phase.bonusKey) {
+    case "to_round_16":
+      return teamQualifiedToRoundOf16(favoriteTeamId, options.groupMatches) ? 5 : 0;
+    case "to_round_8":
+      return teamWonStage(favoriteTeamId, "round_32", finishedKnockout) ? 5 : 0;
+    case "to_quarter":
+      return teamWonStage(favoriteTeamId, "round_16", finishedKnockout) ? 10 : 0;
+    case "to_semi":
+      return teamWonStage(favoriteTeamId, "quarter_final", finishedKnockout) ? 10 : 0;
+    case "to_final":
+      return teamWonStage(favoriteTeamId, "semi_final", finishedKnockout) ? 15 : 0;
+    case "final_winner": {
+      const finalMatch = finishedKnockout.find((m) => m.stage === "final");
+      if (!finalMatch || !options.finalPrediction) return 0;
+      const actual = getMatchWinnerId(finalMatch);
+      const predicted = predictedFinalWinner(options.finalPrediction, finalMatch);
+      return actual && predicted && actual === predicted ? 15 : 0;
+    }
+    default:
+      return 0;
+  }
+}

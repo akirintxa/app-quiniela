@@ -130,6 +130,21 @@ export default function MatchCard({
   const isLive = match.is_locked && !isFinished;
   const isLocked = match.is_locked || isMatchStarted || isFinished;
 
+  // Indicacion para eliminatorias: si el marcador real fue empate y hubo definicion por penales.
+  const matchIsDraw =
+    match.result_a !== null &&
+    match.result_b !== null &&
+    match.result_a === match.result_b;
+  const decidedOnPenalties =
+    isKnockout && isFinished && matchIsDraw && match.winner_id != null;
+  const penaltyWinnerName = decidedOnPenalties
+    ? match.winner_id === match.team_a_id
+      ? match.team_a?.name ?? `Equipo ${match.team_a_id}`
+      : match.winner_id === match.team_b_id
+        ? match.team_b?.name ?? `Equipo ${match.team_b_id}`
+        : `Equipo ${match.winner_id}`
+    : null;
+
   type SavePayload = {
     scoreA: number;
     scoreB: number;
@@ -372,6 +387,11 @@ export default function MatchCard({
                 <span className={`text-xl font-black ${isLive ? 'text-red-300' : 'text-gray-300'}`}>-</span>
                 <span className={`text-4xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{match.result_b ?? 0}</span>
               </div>
+              {decidedOnPenalties && (
+                <div className="mt-3 text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl px-3 py-1">
+                  Gana en penales: {penaltyWinnerName ?? "—"}
+                </div>
+              )}
             </div>
           )}
 

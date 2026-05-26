@@ -6,6 +6,7 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import RankingTabsHandler from "@/components/RankingTabsHandler";
 import ShareRankingButton from "@/components/ShareRankingButton";
 import MemberBadge from "@/components/MemberBadge";
+import MatchHistoryList from "@/components/MatchHistoryList";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
@@ -191,38 +192,68 @@ export default async function RankingPage({
   const historyProfile =
     viewUserId && userMap[viewUserId] ? userMap[viewUserId] : null;
   if (viewUserId && historyProfile) {
-    const [{ data: hMatches }, { data: allTeams }, { data: allGroupMatches }, { data: preds }] =
-      await Promise.all([
-        supabase
-          .from("matches")
-          .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
-          .not("result_a", "is", null)
-          .order("start_time", { ascending: true }),
-        supabase.from("teams").select("*"),
-        supabase
-          .from("matches")
-          .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
-          .eq("stage", "group"),
-        supabase.from("predictions").select("*").eq("user_id", viewUserId),
-      ]);
+    const [
+      { data: hMatches },
+      { data: allTeams },
+      { data: allGroupMatches },
+      { data: allKnockoutMatches },
+      { data: preds },
+      { data: viewProfile },
+    ] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+        .not("result_a", "is", null)
+        .order("start_time", { ascending: true }),
+      supabase.from("teams").select("*"),
+      supabase
+        .from("matches")
+        .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+        .eq("stage", "group"),
+      supabase
+        .from("matches")
+        .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+        .neq("stage", "group"),
+      supabase.from("predictions").select("*").eq("user_id", viewUserId),
+      supabase
+        .from("profiles")
+        .select("favorite_team_id")
+        .eq("id", viewUserId)
+        .maybeSingle(),
+    ]);
 
-    const finishedKnockout = ((hMatches ?? []) as Match[]).filter(
-      (m) => m.stage !== "group"
-    );
+    const finishedMatches = (hMatches ?? []) as Match[];
+    const finishedKnockout = finishedMatches.filter((m) => m.stage !== "group");
+    const groupMatches = (allGroupMatches ?? []) as Match[];
+    const knockoutMatches = (allKnockoutMatches ?? []) as Match[];
+    const teams = (allTeams ?? []) as Team[];
+    const predictions = preds ?? [];
+
     const knockoutLabels =
-      allGroupMatches && allTeams
-        ? buildKnockoutHistoryLabels(
-            finishedKnockout,
-            allGroupMatches as Match[],
-            allTeams as Team[]
-          )
+      groupMatches.length > 0 && teams.length > 0
+        ? buildKnockoutHistoryLabels(finishedKnockout, groupMatches, teams)
         : new Map();
 
-    userHistory = buildMatchHistoryRows(
-      (hMatches ?? []) as Match[],
-      preds ?? [],
-      knockoutLabels
-    );
+    const favoriteTeamId = viewProfile?.favorite_team_id ?? null;
+    const favoriteTeamName = favoriteTeamId
+      ? teams.find((t) => t.id === favoriteTeamId)?.name ?? null
+      : null;
+    const finalPrediction =
+      predictions.find((p) => {
+        const fm = knockoutMatches.find((m) => m.stage === "final");
+        return fm && p.match_id === fm.id;
+      }) ?? null;
+
+    userHistory = buildMatchHistoryRows({
+      finishedMatches,
+      predictions,
+      knockoutLabels,
+      favoriteTeamId,
+      allGroupMatches: groupMatches,
+      allKnockoutMatches: knockoutMatches,
+      finalPrediction,
+      favoriteTeamName,
+    });
   }
 
   return (
@@ -254,43 +285,7 @@ export default async function RankingPage({
               </Link>
             </div>
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              <div className="space-y-3">
-                {userHistory.map((h, i) => (
-                  <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/50">
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] font-black uppercase text-gray-400 mb-1">{h.match}</span>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-xs font-bold text-gray-500 italic">
-                          Pred: <span className="text-gray-900 dark:text-white not-italic">{h.pred}</span>
-                        </span>
-                        <span className="w-px h-3 bg-gray-200" />
-                        <span className="text-xs font-bold text-gray-500 italic">
-                          Res: <span className="text-blue-600 not-italic">{h.res}</span>
-                        </span>
-                      </div>
-                      {h.breakdown && (
-                        <span className="text-[8px] font-bold text-gray-400 uppercase mt-1 tracking-wider">
-                          {h.breakdown}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-black text-lg tracking-tighter leading-none">
-                        {h.total} <span className="text-[10px] text-gray-400">PTS</span>
-                      </div>
-                      <span
-                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                          h.pts > 0
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-400'
-                        }`}
-                      >
-                        +{h.pts}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <MatchHistoryList rows={userHistory} />
             </div>
           </div>
         </div>

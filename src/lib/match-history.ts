@@ -1,8 +1,15 @@
 import { Match, Prediction, Team } from "@/types";
+import {
+  FAVORITE_BONUS_RULES,
+  HISTORY_BONUS_PHASES,
+  getFavoriteBonusPointsForHistoryPhase,
+  type HistoryBonusPhaseKey,
+} from "./favorite-bonus";
 import { formatPointsBreakdown, getPointsBreakdown } from "./points";
 import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
 
 export type MatchHistoryRow = {
+  kind: "match" | "bonus";
   match: string;
   pred: string;
   res: string;
@@ -10,6 +17,23 @@ export type MatchHistoryRow = {
   breakdown: string;
   total: number;
 };
+
+const STAGE_SHORT_LABELS: Record<string, string> = {
+  group: "Grupos",
+  round_32: "16vos",
+  round_16: "8vos",
+  quarter_final: "Cuartos",
+  semi_final: "Semis",
+  final: "Final",
+  third_place: "3er puesto",
+};
+
+export function getHistoryPhaseShortLabel(match: Match): string {
+  if (match.stage === "group") {
+    return match.group_id ? `Grupo ${match.group_id}` : "Grupos";
+  }
+  return STAGE_SHORT_LABELS[match.stage] ?? match.stage;
+}
 
 /** Nombres reales en eliminatorias (oficial), no placeholders del seed. */
 export function buildKnockoutHistoryLabels(
@@ -45,46 +69,151 @@ export function formatHistoryMatchLabel(
   },
   knockoutLabels?: Map<number, { teamAName: string; teamBName: string }>
 ): string {
+  const phase = getHistoryPhaseShortLabel(match);
   const resolved = knockoutLabels?.get(match.id);
-  if (resolved) {
-    return `${resolved.teamAName} vs ${resolved.teamBName}`;
-  }
-
-  const a = match.team_a?.name ?? "Equipo A";
-  const b = match.team_b?.name ?? "Equipo B";
-
-  if (match.stage === "group") {
-    return `${a.substring(0, 3).toUpperCase()} vs ${b.substring(0, 3).toUpperCase()}`;
-  }
-
-  return `${a} vs ${b}`;
+  const teamA = resolved?.teamAName ?? match.team_a?.name ?? "Equipo A";
+  const teamB = resolved?.teamBName ?? match.team_b?.name ?? "Equipo B";
+  return `${phase} — ${teamA} vs ${teamB}`;
 }
 
-export function buildMatchHistoryRows(
-  matches: Match[],
-  predictions: Prediction[],
-  knockoutLabels: Map<number, { teamAName: string; teamBName: string }>
-): MatchHistoryRow[] {
+function getPhaseKeyForMatch(match: Match): HistoryBonusPhaseKey | null {
+  if (match.stage === "group") return "groups";
+  if (match.stage === "round_32") return "round_32";
+  if (match.stage === "round_16") return "round_16";
+  if (match.stage === "quarter_final") return "quarter_final";
+  if (match.stage === "semi_final") return "semi_final";
+  if (match.stage === "final") return "final";
+  return null;
+}
+
+function isLastFinishedMatchInPhase(
+  match: Match,
+  finishedMatches: Match[],
+  allMatches: Match[]
+): boolean {
+  const phaseKey = getPhaseKeyForMatch(match);
+  if (!phaseKey) return false;
+
+  const phaseDef = HISTORY_BONUS_PHASES.find((p) => p.key === phaseKey);
+  if (!phaseDef) return false;
+
+  const phaseMatches = allMatches.filter((m) => phaseDef.stages.includes(m.stage));
+  const finishedInPhase = finishedMatches.filter((m) =>
+    phaseDef.stages.includes(m.stage)
+  );
+  if (finishedInPhase.length === 0) return false;
+
+  const last = [...finishedInPhase].sort(
+    (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+  )[0];
+  return last.id === match.id;
+}
+
+export type BuildMatchHistoryInput = {
+  finishedMatches: Match[];
+  predictions: Prediction[];
+  knockoutLabels: Map<number, { teamAName: string; teamBName: string }>;
+  favoriteTeamId: number | null;
+  allGroupMatches: Match[];
+  allKnockoutMatches: Match[];
+  finalPrediction?: Prediction | null;
+  favoriteTeamName?: string | null;
+};
+
+export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHistoryRow[] {
+  const {
+    finishedMatches,
+    predictions,
+    knockoutLabels,
+    favoriteTeamId,
+    allGroupMatches,
+    allKnockoutMatches,
+    finalPrediction,
+    favoriteTeamName,
+  } = input;
+
+  const allMatches = [...allGroupMatches, ...allKnockoutMatches];
+  const chronological = [...finishedMatches].sort(
+    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  );
+
+  const rows: MatchHistoryRow[] = [];
   let cumulative = 0;
-  return matches
-    .map((m) => {
-      const p = predictions.find((pr) => pr.match_id === m.id);
-      const pts = p?.points_won || 0;
-      cumulative += pts;
-      const breakdown =
-        p && m.result_a != null
-          ? formatPointsBreakdown(
-              getPointsBreakdown(p as Prediction, m as Match)
-            )
-          : "";
-      return {
-        match: formatHistoryMatchLabel(m, knockoutLabels),
-        pred: p ? `${p.predicted_a}-${p.predicted_b}` : "-",
-        res: `${m.result_a}-${m.result_b}`,
-        pts,
-        breakdown,
-        total: cumulative,
-      };
-    })
-    .reverse();
+  const insertedBonusPhases = new Set<HistoryBonusPhaseKey>();
+
+  const bonusContext = {
+    groupMatches: allGroupMatches,
+    knockoutMatches: allKnockoutMatches,
+    finalPrediction,
+  };
+
+  for (const m of chronological) {
+    const p = predictions.find((pr) => pr.match_id === m.id);
+    const pts = p?.points_won ?? 0;
+    cumulative += pts;
+    const breakdown =
+      p && m.result_a != null
+        ? formatPointsBreakdown(getPointsBreakdown(p as Prediction, m as Match))
+        : "";
+
+    const resolved = knockoutLabels.get(m.id);
+    const isPenaltyDecision =
+      m.stage !== "group" &&
+      m.result_a != null &&
+      m.result_b != null &&
+      m.result_a === m.result_b &&
+      m.winner_id != null;
+
+    const penWinnerName =
+      isPenaltyDecision
+        ? m.winner_id === m.team_a_id
+          ? resolved?.teamAName ?? m.team_a?.name
+          : m.winner_id === m.team_b_id
+            ? resolved?.teamBName ?? m.team_b?.name
+            : undefined
+        : undefined;
+
+    const resDisplay = `${m.result_a}-${m.result_b}${
+      penWinnerName ? ` · Penales: ${penWinnerName}` : ""
+    }`;
+
+    rows.push({
+      kind: "match",
+      match: formatHistoryMatchLabel(m, knockoutLabels),
+      pred: p ? `${p.predicted_a}-${p.predicted_b}` : "-",
+      res: resDisplay,
+      pts,
+      breakdown,
+      total: cumulative,
+    });
+
+    if (isLastFinishedMatchInPhase(m, finishedMatches, allMatches)) {
+      const phaseKey = getPhaseKeyForMatch(m);
+      if (phaseKey && !insertedBonusPhases.has(phaseKey)) {
+        const phaseDef = HISTORY_BONUS_PHASES.find((p) => p.key === phaseKey)!;
+        const bonusPts = getFavoriteBonusPointsForHistoryPhase(
+          favoriteTeamId,
+          phaseDef,
+          bonusContext
+        );
+        if (bonusPts !== null) {
+          insertedBonusPhases.add(phaseKey);
+          cumulative += bonusPts;
+          const rule = FAVORITE_BONUS_RULES.find((r) => r.key === phaseDef.bonusKey);
+          const favLabel = favoriteTeamName ?? "Equipo favorito";
+          rows.push({
+            kind: "bonus",
+            match: `Bono favorito · ${phaseDef.shortLabel}`,
+            pred: favLabel,
+            res: bonusPts > 0 ? "Clasificó" : "No clasificó",
+            pts: bonusPts,
+            breakdown: rule?.label ?? "",
+            total: cumulative,
+          });
+        }
+      }
+    }
+  }
+
+  return rows.reverse();
 }

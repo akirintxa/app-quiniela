@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { Match, Prediction, Team } from "@/types";
 import MatchCard from "@/components/MatchCard";
+import MatchHistoryList from "@/components/MatchHistoryList";
 import MemberBadge from "@/components/MemberBadge";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
@@ -245,11 +246,27 @@ export default async function GroupDetailPage({
       allTeams as Team[]
     );
     const hPreds = poolPredictions.filter((p) => p.user_id === viewUserId);
-    userHistory = buildMatchHistoryRows(
-      (hMatches ?? []) as Match[],
-      hPreds,
-      knockoutLabels
-    );
+    const viewUserProfile = profileById.get(viewUserId);
+    const favoriteTeamId = viewUserProfile?.favorite_team_id ?? null;
+    const favoriteTeamName = favoriteTeamId
+      ? teamsById.get(favoriteTeamId)?.name ?? null
+      : null;
+    const finalPrediction =
+      hPreds.find((p) => {
+        const fm = (allKnockoutMatches as Match[]).find((m) => m.stage === "final");
+        return fm && p.match_id === fm.id;
+      }) ?? null;
+
+    userHistory = buildMatchHistoryRows({
+      finishedMatches: (hMatches ?? []) as Match[],
+      predictions: hPreds,
+      knockoutLabels,
+      favoriteTeamId,
+      allGroupMatches: allGroupMatches as Match[],
+      allKnockoutMatches: (allKnockoutMatches ?? []) as Match[],
+      finalPrediction,
+      favoriteTeamName,
+    });
   }
 
   const { data: upcomingRaw } = await supabase
@@ -360,53 +377,7 @@ export default async function GroupDetailPage({
               </Link>
             </div>
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              <div className="space-y-3">
-                {userHistory.map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800/50"
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black uppercase text-gray-400 mb-1">
-                        {h.match}
-                      </span>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-xs font-bold text-gray-500 italic">
-                          Pred:{" "}
-                          <span className="text-gray-900 dark:text-white not-italic">
-                            {h.pred}
-                          </span>
-                        </span>
-                        <span className="w-px h-3 bg-gray-200" />
-                        <span className="text-xs font-bold text-gray-500 italic">
-                          Res:{" "}
-                          <span className="text-blue-600 not-italic">{h.res}</span>
-                        </span>
-                      </div>
-                      {h.breakdown && (
-                        <span className="text-[8px] font-bold text-gray-400 uppercase mt-1 tracking-wider">
-                          {h.breakdown}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className="font-black text-lg tracking-tighter leading-none">
-                        {h.total}{" "}
-                        <span className="text-[10px] text-gray-400">PTS</span>
-                      </div>
-                      <span
-                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                          h.pts > 0
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-400"
-                        }`}
-                      >
-                        +{h.pts}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <MatchHistoryList rows={userHistory} />
             </div>
           </div>
         </div>
