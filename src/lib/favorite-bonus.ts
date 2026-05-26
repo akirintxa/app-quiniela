@@ -176,6 +176,40 @@ export function calculateFavoriteTeamBonuses(
   return { total, awards };
 }
 
+/** La final del Mundial ya tiene resultado oficial cerrado. */
+export function isWorldCupTournamentComplete(knockoutMatches: Match[]): boolean {
+  const finalMatch = knockoutMatches.find((m) => m.stage === "final");
+  if (!finalMatch) return false;
+  return (
+    finalMatch.is_finished &&
+    finalMatch.result_a !== null &&
+    finalMatch.result_b !== null
+  );
+}
+
+/** El equipo favorito del usuario ganó la final (bono campeón +15). */
+export function favoriteTeamIsWorldCupChampion(
+  favoriteTeamId: number | null | undefined,
+  options: {
+    groupMatches: Match[];
+    knockoutMatches: Match[];
+    allTeams: Team[];
+  }
+): boolean {
+  if (!favoriteTeamId || !isWorldCupTournamentComplete(options.knockoutMatches)) {
+    return false;
+  }
+  const finishedKnockout = options.knockoutMatches.filter(
+    (m) => m.result_a !== null && m.result_b !== null
+  );
+  const resolvedKoById = buildResolvedKnockoutMap(
+    options.groupMatches,
+    options.knockoutMatches,
+    options.allTeams
+  );
+  return teamWonStage(favoriteTeamId, "final", finishedKnockout, resolvedKoById);
+}
+
 /** Suma predicciones + bono favorito para un usuario */
 export function getTotalPointsWithFavoriteBonus(
   matchPoints: number,
