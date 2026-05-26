@@ -58,6 +58,8 @@ export interface KnockoutTeamSlot {
   placeholderCode: string;
   displayTeam?: Team;
   predictedTeam?: Team;
+  /** Resultado real cuando difiere del pronóstico mostrado (texto auxiliar en la tarjeta). */
+  officialTeam?: Team;
   source: SlotSource;
   isCorrect?: boolean;
 }

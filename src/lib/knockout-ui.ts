@@ -72,20 +72,17 @@ export function viewModelToMatchCard(vm: KnockoutMatchViewModel): MatchCardExtra
     team_b_id: displayB?.id ?? vm.match.team_b_id,
     placeholder_a: vm.slotA.placeholderCode,
     placeholder_b: vm.slotB.placeholderCode,
-    is_confirmed_a: vm.slotA.source === "confirmed",
-    is_confirmed_b: vm.slotB.source === "confirmed",
-    ghost_team_a:
-      vm.slotA.predictedTeam &&
-      displayA &&
-      vm.slotA.predictedTeam.id !== displayA.id
-        ? vm.slotA.predictedTeam.name
-        : undefined,
-    ghost_team_b:
-      vm.slotB.predictedTeam &&
-      displayB &&
-      vm.slotB.predictedTeam.id !== displayB.id
-        ? vm.slotB.predictedTeam.name
-        : undefined,
+    bracket_label_a: vm.slotA.placeholderLabel,
+    bracket_label_b: vm.slotB.placeholderLabel,
+    // Con equipo resuelto (pronóstico o real) → bandera; si no → texto del cruce sin bandera
+    is_confirmed_a: Boolean(displayA),
+    is_confirmed_b: Boolean(displayB),
+    ghost_team_a: vm.slotA.officialTeam
+      ? `Resultado real: ${vm.slotA.officialTeam.name}`
+      : undefined,
+    ghost_team_b: vm.slotB.officialTeam
+      ? `Resultado real: ${vm.slotB.officialTeam.name}`
+      : undefined,
   };
 }
 

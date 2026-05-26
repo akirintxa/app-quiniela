@@ -202,9 +202,6 @@ function getMatchWinnerTeam(
     return undefined;
   }
 
-  const pred = predictions.find((p) => p.match_id === match.id);
-  if (!pred || pred.predicted_a === null || pred.predicted_b === null) return undefined;
-
   const resolvedA = resolveSlotTeam(
     match.team_a,
     match.id,
@@ -222,15 +219,38 @@ function getMatchWinnerTeam(
     displaySource
   );
 
-  if (pred.predicted_a > pred.predicted_b) return resolvedA;
-  if (pred.predicted_b > pred.predicted_a) return resolvedB;
-  const fromPenaltyPick = pickTeamFromStoredWinnerId(
-    pred.predicted_winner_id,
-    match,
-    resolvedA,
-    resolvedB
-  );
-  if (fromPenaltyPick) return fromPenaltyPick;
+  const pred = predictions.find((p) => p.match_id === match.id);
+  if (
+    pred &&
+    pred.predicted_a !== null &&
+    pred.predicted_b !== null
+  ) {
+    if (pred.predicted_a > pred.predicted_b) return resolvedA;
+    if (pred.predicted_b > pred.predicted_a) return resolvedB;
+    const fromPenaltyPick = pickTeamFromStoredWinnerId(
+      pred.predicted_winner_id,
+      match,
+      resolvedA,
+      resolvedB
+    );
+    if (fromPenaltyPick) return fromPenaltyPick;
+  }
+
+  // Sin pronóstico (o empate sin ganador elegido): ganador real si el partido ya cerró
+  if (displaySource === "predicted" && match.is_finished) {
+    const officialWinnerId = getKnockoutOfficialWinnerTeamId(match, {
+      team_a_id: resolvedA?.id ?? match.team_a_id,
+      team_b_id: resolvedB?.id ?? match.team_b_id,
+      team_a: resolvedA,
+      team_b: resolvedB,
+      knockout_slot_a_id: match.team_a_id,
+      knockout_slot_b_id: match.team_b_id,
+    });
+    if (officialWinnerId == null) return undefined;
+    if (resolvedA?.id === officialWinnerId) return resolvedA;
+    if (resolvedB?.id === officialWinnerId) return resolvedB;
+  }
+
   return undefined;
 }
 
@@ -501,34 +521,50 @@ export function resolveKnockoutBracket(input: ResolveKnockoutInput): KnockoutMat
   });
 }
 
+/**
+ * Equipo mostrado en cada bando del cruce (octavos → final), en este orden:
+ * 1. Pronóstico del partido alimentador (fase anterior), si existe.
+ * 2. Ganador oficial de ese partido, si ya hay resultado real y no hay pronóstico.
+ * 3. Sin equipo → etiqueta del cruce (p. ej. "Ganador partido 89") sin bandera.
+ */
 function mergeDisplaySlots(
   predSlot: KnockoutTeamSlot,
   realSlot?: KnockoutTeamSlot
 ): KnockoutTeamSlot {
-  const useOfficial =
-    realSlot?.source === "confirmed" && realSlot.displayTeam !== undefined;
-
-  const displayTeam = useOfficial ? realSlot.displayTeam : predSlot.displayTeam;
   const predictedTeam = predSlot.displayTeam;
+  const officialTeam =
+    realSlot?.source === "confirmed" ? realSlot.displayTeam : undefined;
+
+  const displayTeam = predictedTeam ?? officialTeam;
+
+  const officialTeamHint =
+    officialTeam &&
+    predictedTeam &&
+    officialTeam.id !== predictedTeam.id
+      ? officialTeam
+      : undefined;
+
+  const source: SlotSource = predictedTeam
+    ? "predicted"
+    : officialTeam
+      ? "confirmed"
+      : "placeholder";
 
   return {
     placeholderLabel: predSlot.placeholderLabel,
     placeholderCode: predSlot.placeholderCode,
     displayTeam,
     predictedTeam,
-    source: useOfficial
-      ? "confirmed"
-      : predSlot.displayTeam
-        ? "predicted"
-        : "placeholder",
+    officialTeam: officialTeamHint,
+    source,
     isCorrect:
-      useOfficial && displayTeam && predictedTeam
-        ? displayTeam.id === predictedTeam.id
+      officialTeam && predictedTeam
+        ? officialTeam.id === predictedTeam.id
         : undefined,
   };
 }
 
-/** Builds view models: predicción de grupos en vivo; oficial solo si hay resultado real */
+/** Builds view models: proyección por predicciones; resultado real como respaldo y pista si difiere */
 export function buildKnockoutViewModels(
   knockoutMatches: Match[],
   groupMatches: Match[],
