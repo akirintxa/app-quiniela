@@ -5,6 +5,7 @@ import {
   getFavoriteBonusPointsForHistoryPhase,
   type HistoryBonusPhaseKey,
 } from "./favorite-bonus";
+import { getKnockoutPenaltyWinnerDisplayName } from "./match-admin";
 import { formatPointsBreakdown, getPointsBreakdown } from "./points";
 import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
 
@@ -164,14 +165,9 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
       m.result_a === m.result_b &&
       m.winner_id != null;
 
-    const penWinnerName =
-      isPenaltyDecision
-        ? m.winner_id === m.team_a_id
-          ? resolved?.teamAName ?? m.team_a?.name
-          : m.winner_id === m.team_b_id
-            ? resolved?.teamBName ?? m.team_b?.name
-            : undefined
-        : undefined;
+    const penWinnerName = isPenaltyDecision
+      ? getKnockoutPenaltyWinnerDisplayName(m, resolved ?? null)
+      : null;
 
     const resDisplay = `${m.result_a}-${m.result_b}${
       penWinnerName ? ` · Penales: ${penWinnerName}` : ""

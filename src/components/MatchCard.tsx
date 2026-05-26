@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Match, Prediction } from "@/types";
 import { savePrediction, fetchPoolMatchPredictions } from "@/app/actions";
+import { getKnockoutPenaltyWinnerDisplayName } from "@/lib/match-admin";
 import { calculatePoints, formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 import { useAutoSavePrediction } from "@/hooks/useAutoSavePrediction";
 
@@ -11,6 +12,8 @@ interface MatchCardProps {
   match: Match & {
     is_locked?: boolean;
     is_finished?: boolean;
+    knockout_slot_a_id?: number | null;
+    knockout_slot_b_id?: number | null;
     placeholder_a?: string;
     placeholder_b?: string;
     bracket_label_a?: string;
@@ -138,11 +141,10 @@ export default function MatchCard({
   const decidedOnPenalties =
     isKnockout && isFinished && matchIsDraw && match.winner_id != null;
   const penaltyWinnerName = decidedOnPenalties
-    ? match.winner_id === match.team_a_id
-      ? match.team_a?.name ?? `Equipo ${match.team_a_id}`
-      : match.winner_id === match.team_b_id
-        ? match.team_b?.name ?? `Equipo ${match.team_b_id}`
-        : `Equipo ${match.winner_id}`
+    ? getKnockoutPenaltyWinnerDisplayName(match, {
+        teamAName: teamAName,
+        teamBName: teamBName,
+      })
     : null;
 
   type SavePayload = {
@@ -389,7 +391,9 @@ export default function MatchCard({
               </div>
               {decidedOnPenalties && (
                 <div className="mt-3 text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl px-3 py-1">
-                  Gana en penales: {penaltyWinnerName ?? "—"}
+                  {penaltyWinnerName
+                    ? `Gana en penales: ${penaltyWinnerName}`
+                    : "Definido en penales (ganador registrado)"}
                 </div>
               )}
             </div>

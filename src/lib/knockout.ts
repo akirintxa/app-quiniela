@@ -550,6 +550,8 @@ export function resolveKnockoutTeams(
   );
   return vms.map((vm) => ({
     ...vm.match,
+    knockout_slot_a_id: vm.match.team_a_id,
+    knockout_slot_b_id: vm.match.team_b_id,
     team_a: vm.slotA.displayTeam ?? vm.match.team_a,
     team_b: vm.slotB.displayTeam ?? vm.match.team_b,
     team_a_id: (vm.slotA.displayTeam ?? vm.match.team_a)?.id ?? vm.match.team_a_id,

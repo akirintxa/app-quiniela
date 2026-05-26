@@ -3,6 +3,9 @@ import { KnockoutMatchViewModel } from "@/types/knockout";
 import { resolveKnockoutBracket } from "./knockout";
 
 export type MatchCardExtras = Match & {
+  /** IDs de equipo en fila `matches` (FK slot); distintos de `team_a_id`/`team_b_id` cuando el UI muestra equipos resueltos. */
+  knockout_slot_a_id?: number | null;
+  knockout_slot_b_id?: number | null;
   placeholder_a?: string;
   placeholder_b?: string;
   bracket_label_a?: string;
@@ -24,6 +27,8 @@ export function viewModelToMatchCardReal(
 
   return {
     ...vm.match,
+    knockout_slot_a_id: vm.match.team_a_id,
+    knockout_slot_b_id: vm.match.team_b_id,
     team_a: confirmedA ? vm.slotA.displayTeam : undefined,
     team_b: confirmedB ? vm.slotB.displayTeam : undefined,
     team_a_id: confirmedA ? vm.slotA.displayTeam!.id : vm.match.team_a_id,
@@ -59,6 +64,8 @@ export function viewModelToMatchCard(vm: KnockoutMatchViewModel): MatchCardExtra
 
   return {
     ...vm.match,
+    knockout_slot_a_id: vm.match.team_a_id,
+    knockout_slot_b_id: vm.match.team_b_id,
     team_a: displayA ?? vm.match.team_a,
     team_b: displayB ?? vm.match.team_b,
     team_a_id: displayA?.id ?? vm.match.team_a_id,
