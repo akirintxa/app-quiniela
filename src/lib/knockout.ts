@@ -18,6 +18,7 @@ import {
   rankBestThirdPlaces,
 } from "./third-place-combinations";
 import { calculateStandings, TeamStats } from "./standings";
+import { getKnockoutOfficialWinnerTeamId } from "./match-admin";
 
 const GROUP_IDS: GroupId[] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
 
@@ -143,6 +144,26 @@ function buildPlaceholderMap(
   return { map, assignment };
 }
 
+/** `predicted_winner_id` / `winner_id` en BD suelen ser FK de slot; comparar también con IDs resueltos. */
+function pickTeamFromStoredWinnerId(
+  storedWinnerId: number | null | undefined,
+  match: Pick<Match, "team_a_id" | "team_b_id">,
+  resolvedA?: Team,
+  resolvedB?: Team
+): Team | undefined {
+  if (storedWinnerId == null) return undefined;
+  const w = Number(storedWinnerId);
+  if (Number.isNaN(w)) return undefined;
+
+  const slotA = Number(match.team_a_id);
+  const slotB = Number(match.team_b_id);
+  if (!Number.isNaN(slotA) && w === slotA) return resolvedA;
+  if (!Number.isNaN(slotB) && w === slotB) return resolvedB;
+  if (resolvedA?.id === w) return resolvedA;
+  if (resolvedB?.id === w) return resolvedB;
+  return undefined;
+}
+
 function getMatchWinnerTeam(
   match: Match,
   matchMap: Map<number, Match>,
@@ -151,13 +172,6 @@ function getMatchWinnerTeam(
   displaySource: DisplaySource
 ): Team | undefined {
   if (displaySource === "real" && match.is_finished) {
-    const winnerId =
-      match.result_a! > match.result_b!
-        ? match.team_a_id
-        : match.result_b! > match.result_a!
-          ? match.team_b_id
-          : match.winner_id;
-    if (!winnerId) return undefined;
     const resolvedA = resolveSlotTeam(
       match.team_a,
       match.id,
@@ -174,7 +188,18 @@ function getMatchWinnerTeam(
       predictions,
       displaySource
     );
-    return winnerId === resolvedA?.id ? resolvedA : resolvedB;
+    const officialWinnerId = getKnockoutOfficialWinnerTeamId(match, {
+      team_a_id: resolvedA?.id ?? match.team_a_id,
+      team_b_id: resolvedB?.id ?? match.team_b_id,
+      team_a: resolvedA,
+      team_b: resolvedB,
+      knockout_slot_a_id: match.team_a_id,
+      knockout_slot_b_id: match.team_b_id,
+    });
+    if (officialWinnerId == null) return undefined;
+    if (resolvedA?.id === officialWinnerId) return resolvedA;
+    if (resolvedB?.id === officialWinnerId) return resolvedB;
+    return undefined;
   }
 
   const pred = predictions.find((p) => p.match_id === match.id);
@@ -199,9 +224,13 @@ function getMatchWinnerTeam(
 
   if (pred.predicted_a > pred.predicted_b) return resolvedA;
   if (pred.predicted_b > pred.predicted_a) return resolvedB;
-  if (pred.predicted_winner_id) {
-    return pred.predicted_winner_id === resolvedA?.id ? resolvedA : resolvedB;
-  }
+  const fromPenaltyPick = pickTeamFromStoredWinnerId(
+    pred.predicted_winner_id,
+    match,
+    resolvedA,
+    resolvedB
+  );
+  if (fromPenaltyPick) return fromPenaltyPick;
   return undefined;
 }
 
