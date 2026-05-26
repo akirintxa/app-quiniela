@@ -1,14 +1,57 @@
-import { Match, Prediction } from "@/types";
+import { Match, Prediction, Team } from "@/types";
 import { KnockoutMatchViewModel } from "@/types/knockout";
+import { resolveKnockoutBracket } from "./knockout";
 
 export type MatchCardExtras = Match & {
   placeholder_a?: string;
   placeholder_b?: string;
+  bracket_label_a?: string;
+  bracket_label_b?: string;
   is_confirmed_a?: boolean;
   is_confirmed_b?: boolean;
   ghost_team_a?: string;
   ghost_team_b?: string;
 };
+
+/** Cruces oficiales del torneo (sin proyección por predicciones). */
+export function viewModelToMatchCardReal(
+  vm: KnockoutMatchViewModel
+): MatchCardExtras {
+  const confirmedA =
+    vm.slotA.source === "confirmed" && vm.slotA.displayTeam != null;
+  const confirmedB =
+    vm.slotB.source === "confirmed" && vm.slotB.displayTeam != null;
+
+  return {
+    ...vm.match,
+    team_a: confirmedA ? vm.slotA.displayTeam : undefined,
+    team_b: confirmedB ? vm.slotB.displayTeam : undefined,
+    team_a_id: confirmedA ? vm.slotA.displayTeam!.id : vm.match.team_a_id,
+    team_b_id: confirmedB ? vm.slotB.displayTeam!.id : vm.match.team_b_id,
+    placeholder_a: vm.slotA.placeholderCode,
+    placeholder_b: vm.slotB.placeholderCode,
+    bracket_label_a: vm.slotA.placeholderLabel,
+    bracket_label_b: vm.slotB.placeholderLabel,
+    is_confirmed_a: confirmedA,
+    is_confirmed_b: confirmedB,
+  };
+}
+
+export function resolveKnockoutTeamsForLeague(
+  knockoutMatches: Match[],
+  groupMatches: Match[],
+  allTeams: Team[],
+  predictions: Prediction[] = []
+): MatchCardExtras[] {
+  const vms = resolveKnockoutBracket({
+    knockoutMatches,
+    groupMatches,
+    predictions,
+    allTeams,
+    displaySource: "real",
+  });
+  return vms.map(viewModelToMatchCardReal);
+}
 
 export function viewModelToMatchCard(vm: KnockoutMatchViewModel): MatchCardExtras {
   const displayA = vm.slotA.displayTeam;

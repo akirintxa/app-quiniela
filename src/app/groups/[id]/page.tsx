@@ -10,7 +10,7 @@ import LeaveGroupButton from "@/components/LeaveGroupButton";
 import DeletePoolButton from "@/components/DeletePoolButton";
 import LeagueAdminPanel from "@/components/LeagueAdminPanel";
 import { calculateStandings } from "@/lib/standings";
-import { resolveKnockoutTeams } from "@/lib/knockout";
+import { resolveKnockoutTeamsForLeague } from "@/lib/knockout-ui";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
 import {
@@ -333,28 +333,18 @@ export default async function GroupDetailPage({
     matches = (data || []) as Match[];
   }
 
-  if (
-    matches.length > 0 &&
-    allKnockoutMatches &&
-    allGroupMatches &&
-    allTeams &&
-    view !== "groups"
-  ) {
-    matches = resolveKnockoutTeams(
-      matches,
-      allGroupMatches as Match[],
-      (myPredictions || []) as Prediction[],
-      allTeams as Team[]
-    );
-    const originals = allKnockoutMatches as (Match & { team_a: Team; team_b: Team })[];
-    matches = matches.map((rm) => {
-      const original = originals.find((o) => o.id === rm.id);
-      return {
-        ...rm,
-        placeholder_a: original?.team_a?.iso_code,
-        placeholder_b: original?.team_b?.iso_code,
-      };
-    });
+  if (matches.length > 0 && allGroupMatches && allTeams && view !== "groups") {
+    const groupStageMatches = matches.filter((m) => m.stage === "group");
+    const knockoutStageMatches = matches.filter((m) => m.stage !== "group");
+    if (knockoutStageMatches.length > 0) {
+      const resolvedKo = resolveKnockoutTeamsForLeague(
+        knockoutStageMatches,
+        allGroupMatches as Match[],
+        allTeams as Team[],
+        (myPredictions || []) as Prediction[]
+      );
+      matches = [...groupStageMatches, ...resolvedKo];
+    }
   }
 
   let groupStandings: ReturnType<typeof calculateStandings> = [];

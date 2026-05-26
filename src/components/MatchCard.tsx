@@ -12,6 +12,8 @@ interface MatchCardProps {
     is_finished?: boolean;
     placeholder_a?: string;
     placeholder_b?: string;
+    bracket_label_a?: string;
+    bracket_label_b?: string;
     is_confirmed_a?: boolean;
     is_confirmed_b?: boolean;
     ghost_team_a?: string;
@@ -105,13 +107,21 @@ export default function MatchCard({
     effectiveScoreB !== "" &&
     Number(effectiveScoreA) === Number(effectiveScoreB);
 
-  const teamAName = match.team_a?.name || `Equipo ${match.team_a_id}`;
-  const teamBName = match.team_b?.name || `Equipo ${match.team_b_id}`;
-  
-  // Logic to show expected matchup (e.g. 1A vs 3X1)
-  const pA = match.placeholder_a;
-  const pB = match.placeholder_b;
-  const expectedMatchup = isKnockout ? `${pA || '?'} vs ${pB || '?'}` : null;
+  const slotLabelA = match.bracket_label_a;
+  const slotLabelB = match.bracket_label_b;
+  const showBracketSlotA = isKnockout && Boolean(slotLabelA && !match.is_confirmed_a);
+  const showBracketSlotB = isKnockout && Boolean(slotLabelB && !match.is_confirmed_b);
+
+  const teamAName = showBracketSlotA
+    ? slotLabelA!
+    : match.team_a?.name || slotLabelA || `Equipo ${match.team_a_id}`;
+  const teamBName = showBracketSlotB
+    ? slotLabelB!
+    : match.team_b?.name || slotLabelB || `Equipo ${match.team_b_id}`;
+
+  const pA = slotLabelA || match.placeholder_a;
+  const pB = slotLabelB || match.placeholder_b;
+  const expectedMatchup = isKnockout ? `${pA || "?"} vs ${pB || "?"}` : null;
 
 
   const isModified =
@@ -204,7 +214,22 @@ export default function MatchCard({
     </div>
   );
 
-  const TeamIcon = ({ team, isSelected, isConfirmed }: { team: any, isSelected?: boolean, isConfirmed?: boolean }) => {
+  const BracketSlotBox = ({ label }: { label: string }) => (
+    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/50 px-1">
+      <span className="text-[7px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-tight text-center leading-tight line-clamp-3">
+        {label}
+      </span>
+    </div>
+  );
+
+  const TeamIcon = ({ team, isSelected, isConfirmed, bracketOnly, bracketLabel }: { team: any, isSelected?: boolean, isConfirmed?: boolean, bracketOnly?: boolean, bracketLabel?: string }) => {
+    if (bracketOnly && bracketLabel) {
+      return (
+        <div className="relative group/icon">
+          <BracketSlotBox label={bracketLabel} />
+        </div>
+      );
+    }
     const flag = getFlagUrl(team);
     return (
       <div className="relative group/icon">
@@ -283,13 +308,15 @@ export default function MatchCard({
 
           <div className="flex items-center justify-between w-full gap-2 sm:gap-4 mb-8">
             <button 
-              disabled={!isDraw || isLocked || !isKnockout}
+              disabled={!isDraw || isLocked || !isKnockout || showBracketSlotA}
               onClick={() => patchScores({ winnerId: match.team_a_id })}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} />
-              <div className="h-8 flex flex-col items-center justify-center">
+              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} bracketOnly={showBracketSlotA} bracketLabel={slotLabelA} />
+              <div className={`flex flex-col items-center justify-center ${showBracketSlotA ? "min-h-0" : "h-8"}`}>
+                {!showBracketSlotA && (
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
+                )}
                 {match.ghost_team_a && (
                   <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
                     Pronóstico: {match.ghost_team_a}
@@ -326,13 +353,15 @@ export default function MatchCard({
             </div>
 
             <button 
-              disabled={!isDraw || isLocked || !isKnockout}
+              disabled={!isDraw || isLocked || !isKnockout || showBracketSlotB}
               onClick={() => patchScores({ winnerId: match.team_b_id })}
               className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
             >
-              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} />
-              <div className="h-8 flex flex-col items-center justify-center">
+              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} bracketOnly={showBracketSlotB} bracketLabel={slotLabelB} />
+              <div className={`flex flex-col items-center justify-center ${showBracketSlotB ? "min-h-0" : "h-8"}`}>
+                {!showBracketSlotB && (
                 <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>
+                )}
                 {match.ghost_team_b && (
                   <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
                     Pronóstico: {match.ghost_team_b}
