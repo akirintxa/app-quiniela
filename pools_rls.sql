@@ -44,7 +44,35 @@ TO authenticated
 WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Usuarios pueden salirse de ligas" ON public.pool_members;
+DROP POLICY IF EXISTS "Creador puede expulsar miembros" ON public.pool_members;
+DROP POLICY IF EXISTS "Admin de liga puede expulsar miembros" ON public.pool_members;
+
 CREATE POLICY "Usuarios pueden salirse de ligas"
 ON public.pool_members FOR DELETE
 TO authenticated
 USING (auth.uid() = user_id);
+
+CREATE POLICY "Creador puede expulsar miembros"
+ON public.pool_members FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.pools p
+    WHERE p.id = pool_members.pool_id
+      AND p.creator_id = auth.uid()
+  )
+  AND pool_members.user_id <> auth.uid()
+);
+
+CREATE POLICY "Admin de liga puede expulsar miembros"
+ON public.pool_members FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.pool_members pm
+    WHERE pm.pool_id = pool_members.pool_id
+      AND pm.user_id = auth.uid()
+      AND pm.role = 'admin'
+  )
+  AND pool_members.user_id <> auth.uid()
+);

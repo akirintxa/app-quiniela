@@ -2,7 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/utils/supabase/server';
-import { createServiceRoleClient } from '@/utils/supabase/admin';
+import {
+  createServiceRoleClient,
+  tryCreateServiceRoleClient,
+} from '@/utils/supabase/admin';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
 import { calculatePoints } from '@/lib/points';
 import { isTournamentStarted } from '@/lib/tournament';
@@ -434,13 +437,19 @@ export async function kickPoolMember(poolId: number, memberUserId: string) {
     throw new Error("No puedes expulsar al creador de la liga");
   }
 
-  const { error } = await supabase
+  // RLS solo permite DELETE de la propia fila; el creador/admin necesita service role o política extra.
+  const db = tryCreateServiceRoleClient() ?? supabase;
+  const { data: removed, error } = await db
     .from("pool_members")
     .delete()
     .eq("pool_id", poolId)
-    .eq("user_id", memberUserId);
+    .eq("user_id", memberUserId)
+    .select("user_id");
 
   if (error) throw error;
+  if (!removed?.length) {
+    throw new Error("No se pudo expulsar al usuario de la liga");
+  }
 
   revalidatePath("/groups");
   revalidatePath(`/groups/${poolId}`);

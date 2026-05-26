@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { kickPoolMember, renamePool } from "@/app/actions";
 
 type LeagueAdminPanelProps = {
@@ -20,10 +21,15 @@ export default function LeagueAdminPanel({
   creatorId,
   members,
 }: LeagueAdminPanelProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [savingName, setSavingName] = useState(false);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [name, setName] = useState(poolName);
+
+  useEffect(() => {
+    setName(poolName);
+  }, [poolName]);
 
   const canManage = isAdmin;
 
@@ -43,6 +49,7 @@ export default function LeagueAdminPanel({
     try {
       await renamePool(poolId, next);
       setOpen(false);
+      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error al renombrar la liga");
     } finally {
@@ -55,6 +62,8 @@ export default function LeagueAdminPanel({
     setKickingId(userId);
     try {
       await kickPoolMember(poolId, userId);
+      setOpen(false);
+      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error al expulsar usuario");
     } finally {

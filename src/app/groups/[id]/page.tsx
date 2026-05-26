@@ -639,7 +639,7 @@ export default async function GroupDetailPage({
                                 </span>
                               </div>
                             </div>
-                            <div className="px-4 text-right shrink-0 font-black text-lg tracking-tighter">
+                            <div className="px-3 sm:px-4 text-right shrink-0 font-black text-base sm:text-lg tracking-tighter tabular-nums min-w-[3.25rem] sm:min-w-[4rem]">
                               {member.points}
                             </div>
                           </Link>
