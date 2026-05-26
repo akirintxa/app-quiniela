@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { Match, Prediction, Team } from "@/types";
 import MatchCard from "@/components/MatchCard";
-import GroupStandings from "@/components/GroupStandings";
 import MemberBadge from "@/components/MemberBadge";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
@@ -9,7 +8,11 @@ import CopyInviteCode from "@/components/CopyInviteCode";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import DeletePoolButton from "@/components/DeletePoolButton";
 import LeagueAdminPanel from "@/components/LeagueAdminPanel";
-import { calculateStandings } from "@/lib/standings";
+import {
+  buildKnockoutHistoryLabels,
+  buildMatchHistoryRows,
+  type MatchHistoryRow,
+} from "@/lib/match-history";
 import { resolveKnockoutTeamsForLeague } from "@/lib/knockout-ui";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
@@ -17,7 +20,6 @@ import {
   buildPlayerStandings,
   sortStandingsByTotal,
 } from "@/lib/global-ranking";
-import { formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
 import { fetchPoolMemberPredictions } from "@/lib/pool-predictions-server";
 import {
   buildPhaseCompletionByUser,
@@ -27,40 +29,9 @@ import {
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-const GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
-
-const KNOCKOUT_STAGES = [
-  "round_32",
-  "round_16",
-  "quarter_final",
-  "semi_final",
-  "final",
-] as const;
-
-const KNOCKOUT_LABELS: Record<string, string> = {
-  round_32: "Dieciseisavos",
-  round_16: "Octavos",
-  quarter_final: "Cuartos",
-  semi_final: "Semis",
-  final: "Final",
-};
-
-function poolHref(
-  poolId: string,
-  params: {
-    view?: string;
-    group?: string;
-    stage?: string;
-    view_user?: string;
-  }
-) {
-  const q = new URLSearchParams();
-  if (params.view) q.set("view", params.view);
-  if (params.group) q.set("group", params.group);
-  if (params.stage) q.set("stage", params.stage);
-  if (params.view_user) q.set("view_user", params.view_user);
-  const s = q.toString();
-  return `/groups/${poolId}${s ? `?${s}` : ""}`;
+function poolHref(poolId: string, params?: { view_user?: string }) {
+  if (!params?.view_user) return `/groups/${poolId}`;
+  return `/groups/${poolId}?view_user=${params.view_user}`;
 }
 
 export default async function GroupDetailPage({
@@ -68,14 +39,11 @@ export default async function GroupDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ group?: string; view?: string; stage?: string; view_user?: string }>;
+  searchParams: Promise<{ view_user?: string }>;
 }) {
   const supabase = await createClient();
   const { id: poolId } = await params;
   const resolvedSearchParams = await searchParams;
-  const view = resolvedSearchParams.view || "groups";
-  const selectedGroup = resolvedSearchParams.group || "A";
-  const selectedStage = resolvedSearchParams.stage || "round_32";
   const viewUserId = resolvedSearchParams.view_user;
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -244,46 +212,8 @@ export default async function GroupDetailPage({
 
   const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
 
-  let userHistory: {
-    match: string;
-    pred: string;
-    res: string;
-    pts: number;
-    breakdown: string;
-    total: number;
-  }[] = [];
+  let userHistory: MatchHistoryRow[] = [];
   const historyProfile = viewUserId ? userMap[viewUserId] : null;
-
-  if (viewUserId && historyProfile) {
-    const { data: hMatches } = await supabase
-      .from("matches")
-      .select("*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)")
-      .not("result_a", "is", null)
-      .order("start_time", { ascending: true });
-    const hPreds = poolPredictions.filter((p) => p.user_id === viewUserId);
-    let cumulative = 0;
-    userHistory = (hMatches || [])
-      .map((m) => {
-        const p = hPreds.find((pr) => pr.match_id === m.id);
-        const pts = p?.points_won || 0;
-        cumulative += pts;
-        const breakdown =
-          p && m.result_a != null
-            ? formatPointsBreakdown(
-                getPointsBreakdown(p as Prediction, m as Match)
-              )
-            : "";
-        return {
-          match: `${(m.team_a as { name: string }).name.substring(0, 3).toUpperCase()} vs ${(m.team_b as { name: string }).name.substring(0, 3).toUpperCase()}`,
-          pred: p ? `${p.predicted_a}-${p.predicted_b}` : "-",
-          res: `${m.result_a}-${m.result_b}`,
-          pts,
-          breakdown,
-          total: cumulative,
-        };
-      })
-      .reverse();
-  }
 
   const { data: allTeams } = await supabase.from("teams").select("*");
   const { data: allGroupMatches } = await supabase
@@ -300,40 +230,38 @@ export default async function GroupDetailPage({
     .select("*")
     .eq("user_id", user.id);
 
-  let matches: Match[] = [];
-
-  if (view === "today") {
-    const { data } = await supabase
+  if (viewUserId && historyProfile && allGroupMatches && allTeams) {
+    const { data: hMatches } = await supabase
       .from("matches")
-      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
-      .eq("is_finished", false)
-      .order("start_time", { ascending: true })
-      .limit(40);
-    matches = (data || []) as Match[];
-  } else if (view === "groups") {
-    const { data } = await supabase
-      .from("matches")
-      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
-      .eq("group_id", selectedGroup)
-      .eq("stage", "group")
-      .order("is_finished", { ascending: true })
+      .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+      .not("result_a", "is", null)
       .order("start_time", { ascending: true });
-    matches = (data || []) as Match[];
-  } else if (view === "knockout") {
-    const stageFilter =
-      selectedStage === "final"
-        ? ["final", "third_place"]
-        : [selectedStage];
-    const { data } = await supabase
-      .from("matches")
-      .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
-      .in("stage", stageFilter)
-      .order("is_finished", { ascending: true })
-      .order("start_time", { ascending: true });
-    matches = (data || []) as Match[];
+    const finishedKnockout = ((hMatches ?? []) as Match[]).filter(
+      (m) => m.stage !== "group"
+    );
+    const knockoutLabels = buildKnockoutHistoryLabels(
+      finishedKnockout,
+      allGroupMatches as Match[],
+      allTeams as Team[]
+    );
+    const hPreds = poolPredictions.filter((p) => p.user_id === viewUserId);
+    userHistory = buildMatchHistoryRows(
+      (hMatches ?? []) as Match[],
+      hPreds,
+      knockoutLabels
+    );
   }
 
-  if (matches.length > 0 && allGroupMatches && allTeams && view !== "groups") {
+  const { data: upcomingRaw } = await supabase
+    .from("matches")
+    .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+    .eq("is_finished", false)
+    .order("start_time", { ascending: true })
+    .limit(40);
+
+  let matches: Match[] = (upcomingRaw ?? []) as Match[];
+
+  if (matches.length > 0 && allGroupMatches && allTeams) {
     const groupStageMatches = matches.filter((m) => m.stage === "group");
     const knockoutStageMatches = matches.filter((m) => m.stage !== "group");
     if (knockoutStageMatches.length > 0) {
@@ -343,69 +271,49 @@ export default async function GroupDetailPage({
         allTeams as Team[],
         (myPredictions || []) as Prediction[]
       );
-      matches = [...groupStageMatches, ...resolvedKo];
+      matches = [...groupStageMatches, ...resolvedKo].sort(
+        (a, b) =>
+          new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      );
     }
   }
-
-  let groupStandings: ReturnType<typeof calculateStandings> = [];
-  let predictedStandings: ReturnType<typeof calculateStandings> = [];
-
-  if (view === "groups" && matches.length > 0) {
-    const groupTeamsMap = new Map<number, Team>();
-    matches.forEach((m) => {
-      if (m.team_a) groupTeamsMap.set(m.team_a.id, m.team_a as Team);
-      if (m.team_b) groupTeamsMap.set(m.team_b.id, m.team_b as Team);
-    });
-    const groupTeams = Array.from(groupTeamsMap.values());
-    groupStandings = calculateStandings(matches, groupTeams);
-    const simulatedMatches = matches.map((m) => {
-      const pred = myPredictions?.find((p) => p.match_id === m.id);
-      return {
-        ...m,
-        result_a: pred?.predicted_a ?? null,
-        result_b: pred?.predicted_b ?? null,
-      };
-    });
-    predictedStandings = calculateStandings(simulatedMatches as Match[], groupTeams);
-  }
-
-  const listParams = { group: selectedGroup, stage: selectedStage };
 
   const poolMembers = memberIds.map((id) => ({
     id,
     nickname: profileById.get(id)?.nickname || "Usuario",
   }));
 
-  let phaseCompleteByUser: Record<string, boolean> = {};
   const allMatchesForPhase = [
     ...((allGroupMatches ?? []) as Match[]),
     ...((allKnockoutMatches ?? []) as Match[]),
   ];
 
-  if (view === "groups") {
-    const ctx: PhaseContext = { view: "groups", groupId: selectedGroup };
+  const phaseCompleteCache = new Map<string, Record<string, boolean>>();
+
+  function phaseCompleteForMatch(match: Match): Record<string, boolean> {
+    const cacheKey =
+      match.stage === "group"
+        ? `group:${match.group_id}`
+        : `knockout:${match.stage}`;
+    if (phaseCompleteCache.has(cacheKey)) {
+      return phaseCompleteCache.get(cacheKey)!;
+    }
+    const ctx: PhaseContext =
+      match.stage === "group"
+        ? { view: "groups", groupId: match.group_id! }
+        : { view: "knockout", stage: match.stage };
     const phaseMatchIds = getPhaseMatchIds(allMatchesForPhase, ctx);
     const phaseMatches = allMatchesForPhase.filter((m) =>
       phaseMatchIds.includes(m.id)
     );
-    phaseCompleteByUser = buildPhaseCompletionByUser(
+    const byUser = buildPhaseCompletionByUser(
       memberIds,
       poolPredictions,
       phaseMatchIds,
       phaseMatches
     );
-  } else if (view === "knockout") {
-    const ctx: PhaseContext = { view: "knockout", stage: selectedStage };
-    const phaseMatchIds = getPhaseMatchIds(allMatchesForPhase, ctx);
-    const phaseMatches = allMatchesForPhase.filter((m) =>
-      phaseMatchIds.includes(m.id)
-    );
-    phaseCompleteByUser = buildPhaseCompletionByUser(
-      memberIds,
-      poolPredictions,
-      phaseMatchIds,
-      phaseMatches
-    );
+    phaseCompleteCache.set(cacheKey, byUser);
+    return byUser;
   }
 
   return (
@@ -432,7 +340,7 @@ export default async function GroupDetailPage({
                 </div>
               </div>
               <Link
-                href={poolHref(poolId, { view, ...listParams })}
+                href={poolHref(poolId)}
                 className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform"
               >
                 <svg
@@ -550,18 +458,6 @@ export default async function GroupDetailPage({
                 </span>
                 <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900" />
               </h2>
-              {(view === "groups" || view === "knockout") && (
-                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500" />
-                    Fase completa
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-orange-500" />
-                    Pendiente
-                  </span>
-                </p>
-              )}
               <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
@@ -569,11 +465,7 @@ export default async function GroupDetailPage({
                       <tr key={member.id} className="group">
                         <td className="p-0">
                           <Link
-                            href={poolHref(poolId, {
-                              view,
-                              ...listParams,
-                              view_user: member.id,
-                            })}
+                            href={poolHref(poolId, { view_user: member.id })}
                             className={`flex items-center w-full px-4 py-4 transition-all ${
                               member.isMe
                                 ? "bg-blue-600 text-white"
@@ -597,20 +489,6 @@ export default async function GroupDetailPage({
                               </div>
                             </div>
                             <div className="flex-1 flex items-center gap-3 min-w-0">
-                              {(view === "groups" || view === "knockout") && (
-                                <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${
-                                    phaseCompleteByUser[member.id]
-                                      ? "bg-green-500"
-                                      : "bg-orange-500"
-                                  }`}
-                                  title={
-                                    phaseCompleteByUser[member.id]
-                                      ? "Fase completa"
-                                      : "Fase incompleta"
-                                  }
-                                />
-                              )}
                               <MemberBadge
                                 flagUrl={member.flagUrl}
                                 nickname={member.nickname}
@@ -643,82 +521,9 @@ export default async function GroupDetailPage({
           </div>
 
           <div className="lg:col-span-8 space-y-8">
-            <div className="flex flex-col gap-6">
-              <div className="flex p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar">
-                <Link
-                  href={poolHref(poolId, { view: "today" })}
-                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                    view === "today"
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
-                      : "text-gray-400"
-                  }`}
-                >
-                  Próximos
-                </Link>
-                <Link
-                  href={poolHref(poolId, { view: "groups", group: selectedGroup })}
-                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                    view === "groups"
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
-                      : "text-gray-400"
-                  }`}
-                >
-                  Grupos
-                </Link>
-                <Link
-                  href={poolHref(poolId, { view: "knockout", stage: selectedStage })}
-                  className={`px-5 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                    view === "knockout"
-                      ? "bg-white dark:bg-zinc-800 text-blue-600 shadow-md scale-105"
-                      : "text-gray-400"
-                  }`}
-                >
-                  Eliminatorias
-                </Link>
-              </div>
-
-              {view === "groups" && (
-                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2">
-                  {GROUPS.map((g) => (
-                    <Link
-                      key={g}
-                      href={poolHref(poolId, { view: "groups", group: g })}
-                      className={`w-10 h-10 flex items-center justify-center rounded-xl text-xs font-black transition-all ${
-                        selectedGroup === g
-                          ? "bg-blue-600 text-white shadow-lg"
-                          : "bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800"
-                      }`}
-                    >
-                      {g}
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              {view === "knockout" && (
-                <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2">
-                  {KNOCKOUT_STAGES.map((stage) => (
-                    <Link
-                      key={stage}
-                      href={poolHref(poolId, { view: "knockout", stage })}
-                      className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                        selectedStage === stage
-                          ? "bg-blue-600 text-white shadow-lg"
-                          : "bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800"
-                      }`}
-                    >
-                      {KNOCKOUT_LABELS[stage]}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {view === "groups" && (
-              <div className="space-y-8">
-                <GroupStandings stats={groupStandings} predictedStats={predictedStandings} />
-              </div>
-            )}
+            <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
+              Próximos partidos
+            </h2>
 
             {matches.length > 0 ? (
               <div className="grid grid-cols-1 gap-8">
@@ -732,7 +537,7 @@ export default async function GroupDetailPage({
                       initialPrediction={prediction}
                       poolId={poolId}
                       poolMembers={poolMembers}
-                      phaseCompleteByUser={phaseCompleteByUser}
+                      phaseCompleteByUser={phaseCompleteForMatch(match)}
                     />
                   );
                 })}
@@ -740,7 +545,7 @@ export default async function GroupDetailPage({
             ) : (
               <div className="py-16 text-center rounded-[2rem] border border-dashed border-gray-200 dark:border-zinc-800">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                  No hay partidos en esta vista
+                  No hay partidos próximos
                 </p>
               </div>
             )}

@@ -86,10 +86,10 @@ export function getPointsBreakdown(
 
 export function formatPointsBreakdown(b: PointsBreakdown): string {
   const parts: string[] = [];
-  if (b.winner) parts.push("+2");
-  if (b.difference) parts.push("+1 dif");
-  if (b.goalsA) parts.push("+1 A");
-  if (b.goalsB) parts.push("+1 B");
+  if (b.winner) parts.push("+2G");
+  if (b.difference) parts.push("+1D");
+  if (b.goalsA) parts.push("+1A");
+  if (b.goalsB) parts.push("+1B");
   return parts.length > 0 ? parts.join(" ") : "0";
 }
 

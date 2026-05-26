@@ -14,10 +14,11 @@ import {
   sortStandingsByTotal,
 } from "@/lib/global-ranking";
 import {
-  formatPointsBreakdown,
-  getPointsBreakdown,
-} from "@/lib/points";
-import { Match, Prediction } from "@/types";
+  buildKnockoutHistoryLabels,
+  buildMatchHistoryRows,
+  type MatchHistoryRow,
+} from "@/lib/match-history";
+import { Match, Team } from "@/types";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
@@ -186,40 +187,42 @@ export default async function RankingPage({
   }
 
   // --- HISTORY MODAL ---
-  let userHistory: any[] = [];
-  let historyProfile = (viewUserId && userMap[viewUserId]) ? userMap[viewUserId] : null;
+  let userHistory: MatchHistoryRow[] = [];
+  const historyProfile =
+    viewUserId && userMap[viewUserId] ? userMap[viewUserId] : null;
   if (viewUserId && historyProfile) {
-    const { data: matches } = await supabase
-      .from('matches')
-      .select('*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)')
-      .not('result_a', 'is', null)
-      .order('start_time', { ascending: true });
-    const { data: preds } = await supabase
-      .from('predictions')
-      .select('*')
-      .eq('user_id', viewUserId);
-    let cumulative = 0;
-    userHistory = (matches || [])
-      .map((m) => {
-        const p = preds?.find((pr) => pr.match_id === m.id);
-        const pts = p?.points_won || 0;
-        cumulative += pts;
-        const breakdown =
-          p && m.result_a != null
-            ? formatPointsBreakdown(
-                getPointsBreakdown(p as Prediction, m as Match)
-              )
-            : '';
-        return {
-          match: `${(m.team_a as { name: string }).name.substring(0, 3).toUpperCase()} vs ${(m.team_b as { name: string }).name.substring(0, 3).toUpperCase()}`,
-          pred: p ? `${p.predicted_a}-${p.predicted_b}` : '-',
-          res: `${m.result_a}-${m.result_b}`,
-          pts,
-          breakdown,
-          total: cumulative,
-        };
-      })
-      .reverse();
+    const [{ data: hMatches }, { data: allTeams }, { data: allGroupMatches }, { data: preds }] =
+      await Promise.all([
+        supabase
+          .from("matches")
+          .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+          .not("result_a", "is", null)
+          .order("start_time", { ascending: true }),
+        supabase.from("teams").select("*"),
+        supabase
+          .from("matches")
+          .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
+          .eq("stage", "group"),
+        supabase.from("predictions").select("*").eq("user_id", viewUserId),
+      ]);
+
+    const finishedKnockout = ((hMatches ?? []) as Match[]).filter(
+      (m) => m.stage !== "group"
+    );
+    const knockoutLabels =
+      allGroupMatches && allTeams
+        ? buildKnockoutHistoryLabels(
+            finishedKnockout,
+            allGroupMatches as Match[],
+            allTeams as Team[]
+          )
+        : new Map();
+
+    userHistory = buildMatchHistoryRows(
+      (hMatches ?? []) as Match[],
+      preds ?? [],
+      knockoutLabels
+    );
   }
 
   return (
