@@ -98,13 +98,6 @@ export default function MatchCard({
   }[]>([]);
   const [loadingSpy, setLoadingSpy] = useState(false);
 
-  useEffect(() => {
-    if (isControlled) return;
-    setScoreA(initialPrediction?.predicted_a ?? "");
-    setScoreB(initialPrediction?.predicted_b ?? "");
-    setWinnerId(initialPrediction?.predicted_winner_id ?? null);
-  }, [initialPrediction, isControlled]);
-
   const isKnockout = match.stage !== "group";
   const knockoutResolved = isKnockout ? knockoutResolvedFromMatch(match) : null;
   const isDraw =
@@ -137,6 +130,21 @@ export default function MatchCard({
     effectiveScoreA !== (initialPrediction?.predicted_a ?? "") ||
     effectiveScoreB !== (initialPrediction?.predicted_b ?? "") ||
     effectiveWinnerId !== (initialPrediction?.predicted_winner_id ?? null);
+
+  useEffect(() => {
+    if (isControlled) return;
+    if (isModified) return;
+    setScoreA(initialPrediction?.predicted_a ?? "");
+    setScoreB(initialPrediction?.predicted_b ?? "");
+    setWinnerId(initialPrediction?.predicted_winner_id ?? null);
+  }, [
+    isControlled,
+    isModified,
+    match.id,
+    initialPrediction?.predicted_a,
+    initialPrediction?.predicted_b,
+    initialPrediction?.predicted_winner_id,
+  ]);
 
   const hasData = effectiveScoreA !== "" && effectiveScoreB !== "";
 
@@ -197,11 +205,9 @@ export default function MatchCard({
         payload.scoreB,
         payload.winnerId
       );
-      if (match.stage === "group") {
-        router.refresh();
-      }
+      router.refresh();
     },
-    [match.id, match.stage, router]
+    [match.id, router]
   );
 
   const { status: saveStatus, scheduleSave, flush, retry, syncSavedKey, isBusy } =
@@ -217,6 +223,7 @@ export default function MatchCard({
 
   useEffect(() => {
     if (isControlled || !initialPrediction) return;
+    if (isModified) return;
     if (
       initialPrediction.predicted_a == null ||
       initialPrediction.predicted_b == null
@@ -233,8 +240,8 @@ export default function MatchCard({
     initialPrediction?.predicted_b,
     initialPrediction?.predicted_winner_id,
     isControlled,
+    isModified,
     syncSavedKey,
-    initialPrediction,
   ]);
 
   useEffect(() => {
@@ -463,9 +470,9 @@ export default function MatchCard({
             <div className="flex flex-col items-center gap-1 flex-shrink-0">
               <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">{isFinished ? 'Tu Pronóstico' : 'Tu Predicción'}</span>
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <input type="number" min="0" value={effectiveScoreA} onChange={(e) => patchScores({ scoreA: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isBusy || isLocked} />
+                <input type="number" min="0" value={effectiveScoreA} onChange={(e) => patchScores({ scoreA: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isLocked} />
                 <span className="text-gray-300 font-black">:</span>
-                <input type="number" min="0" value={effectiveScoreB} onChange={(e) => patchScores({ scoreB: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isBusy || isLocked} />
+                <input type="number" min="0" value={effectiveScoreB} onChange={(e) => patchScores({ scoreB: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isLocked} />
               </div>
               {initialPrediction?.points_won != null && isFinished && (
                 <div className="mt-3 flex flex-col items-center gap-1 animate-in zoom-in duration-300">
