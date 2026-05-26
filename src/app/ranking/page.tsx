@@ -251,6 +251,7 @@ export default async function RankingPage({
       favoriteTeamId,
       allGroupMatches: groupMatches,
       allKnockoutMatches: knockoutMatches,
+      allTeams: teams,
       finalPrediction,
       favoriteTeamName,
     });

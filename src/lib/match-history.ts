@@ -5,7 +5,10 @@ import {
   getFavoriteBonusPointsForHistoryPhase,
   type HistoryBonusPhaseKey,
 } from "./favorite-bonus";
-import { getKnockoutPenaltyWinnerDisplayName } from "./match-admin";
+import {
+  getKnockoutPenaltyWinnerDisplayName,
+  type KnockoutResolvedForWinner,
+} from "./match-admin";
 import { formatPointsBreakdown, getPointsBreakdown } from "./points";
 import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
 
@@ -117,6 +120,7 @@ export type BuildMatchHistoryInput = {
   favoriteTeamId: number | null;
   allGroupMatches: Match[];
   allKnockoutMatches: Match[];
+  allTeams: Team[];
   finalPrediction?: Prediction | null;
   favoriteTeamName?: string | null;
 };
@@ -129,11 +133,24 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
     favoriteTeamId,
     allGroupMatches,
     allKnockoutMatches,
+    allTeams,
     finalPrediction,
     favoriteTeamName,
   } = input;
 
   const allMatches = [...allGroupMatches, ...allKnockoutMatches];
+  const resolvedKnockoutById = new Map<number, KnockoutResolvedForWinner>();
+  if (allTeams.length > 0 && allKnockoutMatches.length > 0) {
+    for (const row of resolveKnockoutTeamsForLeague(
+      allKnockoutMatches,
+      allGroupMatches,
+      allTeams,
+      []
+    )) {
+      resolvedKnockoutById.set(row.id, row as KnockoutResolvedForWinner);
+    }
+  }
+
   const chronological = [...finishedMatches].sort(
     (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
   );
@@ -146,6 +163,8 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
     groupMatches: allGroupMatches,
     knockoutMatches: allKnockoutMatches,
     finalPrediction,
+    allTeams,
+    resolvedKnockoutById,
   };
 
   for (const m of chronological) {

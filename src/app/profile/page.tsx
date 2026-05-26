@@ -146,7 +146,7 @@ export default function ProfilePage() {
         let favoriteBonus = { total: 0, awards: [] as FavoriteBonusAward[] };
         const favId = profileFields?.favorite_team_id;
         if (favId) {
-          const [{ data: groupMatches }, { data: knockoutMatches }] =
+          const [{ data: groupMatches }, { data: knockoutMatches }, { data: allTeamsRows }] =
             await Promise.all([
               supabase
                 .from("matches")
@@ -156,6 +156,7 @@ export default function ProfilePage() {
                 .from("matches")
                 .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
                 .neq("stage", "group"),
+              supabase.from("teams").select("*"),
             ]);
           let finalPrediction: Prediction | null = null;
           const finalMatch = (knockoutMatches as Match[] | null)?.find(
@@ -174,6 +175,7 @@ export default function ProfilePage() {
             groupMatches: (groupMatches || []) as Match[],
             knockoutMatches: (knockoutMatches || []) as Match[],
             finalPrediction,
+            allTeams: (allTeamsRows || []) as Team[],
           });
         }
         setBonusAwards(favoriteBonus.awards);

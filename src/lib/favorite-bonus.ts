@@ -1,5 +1,29 @@
 import { Match, Prediction, Team } from "@/types";
 import { calculateStandings } from "./standings";
+import {
+  getKnockoutOfficialWinnerTeamId,
+  resolvedKnockoutSideNationalId,
+  type KnockoutResolvedForWinner,
+} from "./match-admin";
+import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
+
+function buildResolvedKnockoutMap(
+  groupMatches: Match[],
+  knockoutMatches: Match[],
+  allTeams: Team[]
+): Map<number, KnockoutResolvedForWinner> {
+  const map = new Map<number, KnockoutResolvedForWinner>();
+  if (!allTeams.length || !knockoutMatches.length) return map;
+  for (const row of resolveKnockoutTeamsForLeague(
+    knockoutMatches,
+    groupMatches,
+    allTeams,
+    []
+  )) {
+    map.set(row.id, row as KnockoutResolvedForWinner);
+  }
+  return map;
+}
 
 export const FAVORITE_BONUS_RULES = [
   {
@@ -53,22 +77,18 @@ export type FavoriteBonusResult = {
   awards: FavoriteBonusAward[];
 };
 
-function getMatchWinnerId(match: Match): number | null {
-  if (match.result_a === null || match.result_b === null) return null;
-  if (match.winner_id) return match.winner_id;
-  if (match.result_a > match.result_b) return match.team_a_id;
-  if (match.result_b > match.result_a) return match.team_b_id;
-  return null;
-}
-
 function teamWonStage(
   teamId: number,
   stage: string,
-  finishedKnockout: Match[]
+  finishedKnockout: Match[],
+  resolvedById: Map<number, KnockoutResolvedForWinner>
 ): boolean {
   return finishedKnockout
     .filter((m) => m.stage === stage)
-    .some((m) => getMatchWinnerId(m) === teamId);
+    .some((m) => {
+      const wid = getKnockoutOfficialWinnerTeamId(m, resolvedById.get(m.id));
+      return wid !== null && wid === teamId;
+    });
 }
 
 function teamQualifiedToRoundOf16(
@@ -100,19 +120,26 @@ function teamQualifiedToRoundOf16(
 
 function predictedFinalWinner(
   prediction: Prediction,
-  match: Match
+  rawFinal: Match,
+  resolved: KnockoutResolvedForWinner | null | undefined
 ): number | null {
-  if (prediction.predicted_winner_id) return prediction.predicted_winner_id;
-  if (
-    prediction.predicted_a === null ||
-    prediction.predicted_b === null
-  ) {
+  if (prediction.predicted_winner_id != null) {
+    return Number(prediction.predicted_winner_id);
+  }
+  if (prediction.predicted_a === null || prediction.predicted_b === null) {
     return null;
   }
   const pA = Number(prediction.predicted_a);
   const pB = Number(prediction.predicted_b);
-  if (pA > pB) return match.team_a_id;
-  if (pB > pA) return match.team_b_id;
+  if (pA === pB) return null;
+
+  if (resolved) {
+    if (pA > pB) return resolvedKnockoutSideNationalId(resolved, "a");
+    if (pB > pA) return resolvedKnockoutSideNationalId(resolved, "b");
+  }
+
+  if (pA > pB) return rawFinal.team_a_id;
+  if (pB > pA) return rawFinal.team_b_id;
   return null;
 }
 
@@ -122,6 +149,7 @@ export function calculateFavoriteTeamBonuses(
     groupMatches: Match[];
     knockoutMatches: Match[];
     finalPrediction?: Prediction | null;
+    allTeams: Team[];
   }
 ): FavoriteBonusResult {
   const awards: FavoriteBonusAward[] = [];
@@ -132,6 +160,12 @@ export function calculateFavoriteTeamBonuses(
     (m) => m.result_a !== null && m.result_b !== null
   );
 
+  const resolvedKoById = buildResolvedKnockoutMap(
+    options.groupMatches,
+    options.knockoutMatches,
+    options.allTeams
+  );
+
   const rule = (key: FavoriteBonusKey) =>
     FAVORITE_BONUS_RULES.find((r) => r.key === key)!;
 
@@ -140,31 +174,36 @@ export function calculateFavoriteTeamBonuses(
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
-  if (teamWonStage(teamId, "round_32", finishedKnockout)) {
+  if (teamWonStage(teamId, "round_32", finishedKnockout, resolvedKoById)) {
     const r = rule("to_round_8");
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
-  if (teamWonStage(teamId, "round_16", finishedKnockout)) {
+  if (teamWonStage(teamId, "round_16", finishedKnockout, resolvedKoById)) {
     const r = rule("to_quarter");
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
-  if (teamWonStage(teamId, "quarter_final", finishedKnockout)) {
+  if (teamWonStage(teamId, "quarter_final", finishedKnockout, resolvedKoById)) {
     const r = rule("to_semi");
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
-  if (teamWonStage(teamId, "semi_final", finishedKnockout)) {
+  if (teamWonStage(teamId, "semi_final", finishedKnockout, resolvedKoById)) {
     const r = rule("to_final");
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
   const finalMatch = finishedKnockout.find((m) => m.stage === "final");
   if (finalMatch && options.finalPrediction) {
-    const actual = getMatchWinnerId(finalMatch);
-    const predicted = predictedFinalWinner(options.finalPrediction, finalMatch);
-    if (actual && predicted && actual === predicted) {
+    const resolvedFinal = resolvedKoById.get(finalMatch.id);
+    const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
+    const predicted = predictedFinalWinner(
+      options.finalPrediction,
+      finalMatch,
+      resolvedFinal
+    );
+    if (actual != null && predicted != null && actual === predicted) {
       const r = rule("final_winner");
       awards.push({ key: r.key, points: r.points, label: r.label });
     }
@@ -230,6 +269,8 @@ export function getFavoriteBonusPointsForHistoryPhase(
     groupMatches: Match[];
     knockoutMatches: Match[];
     finalPrediction?: Prediction | null;
+    allTeams: Team[];
+    resolvedKnockoutById?: Map<number, KnockoutResolvedForWinner>;
   }
 ): number | null {
   const allMatches = [...options.groupMatches, ...options.knockoutMatches];
@@ -238,23 +279,49 @@ export function getFavoriteBonusPointsForHistoryPhase(
 
   const finishedKnockout = options.knockoutMatches.filter(matchHasOfficialResult);
 
+  const resolvedKoById =
+    options.resolvedKnockoutById ??
+    buildResolvedKnockoutMap(
+      options.groupMatches,
+      options.knockoutMatches,
+      options.allTeams
+    );
+
   switch (phase.bonusKey) {
     case "to_round_16":
       return teamQualifiedToRoundOf16(favoriteTeamId, options.groupMatches) ? 5 : 0;
     case "to_round_8":
-      return teamWonStage(favoriteTeamId, "round_32", finishedKnockout) ? 5 : 0;
+      return teamWonStage(favoriteTeamId, "round_32", finishedKnockout, resolvedKoById)
+        ? 5
+        : 0;
     case "to_quarter":
-      return teamWonStage(favoriteTeamId, "round_16", finishedKnockout) ? 10 : 0;
+      return teamWonStage(favoriteTeamId, "round_16", finishedKnockout, resolvedKoById)
+        ? 10
+        : 0;
     case "to_semi":
-      return teamWonStage(favoriteTeamId, "quarter_final", finishedKnockout) ? 10 : 0;
+      return teamWonStage(
+        favoriteTeamId,
+        "quarter_final",
+        finishedKnockout,
+        resolvedKoById
+      )
+        ? 10
+        : 0;
     case "to_final":
-      return teamWonStage(favoriteTeamId, "semi_final", finishedKnockout) ? 15 : 0;
+      return teamWonStage(favoriteTeamId, "semi_final", finishedKnockout, resolvedKoById)
+        ? 15
+        : 0;
     case "final_winner": {
       const finalMatch = finishedKnockout.find((m) => m.stage === "final");
       if (!finalMatch || !options.finalPrediction) return 0;
-      const actual = getMatchWinnerId(finalMatch);
-      const predicted = predictedFinalWinner(options.finalPrediction, finalMatch);
-      return actual && predicted && actual === predicted ? 15 : 0;
+      const resolvedFinal = resolvedKoById.get(finalMatch.id);
+      const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
+      const predicted = predictedFinalWinner(
+        options.finalPrediction,
+        finalMatch,
+        resolvedFinal
+      );
+      return actual != null && predicted != null && actual === predicted ? 15 : 0;
     }
     default:
       return 0;

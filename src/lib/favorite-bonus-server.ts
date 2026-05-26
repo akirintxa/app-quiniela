@@ -1,12 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Match, Prediction } from "@/types";
+import { Match, Prediction, Team } from "@/types";
 import {
   calculateFavoriteTeamBonuses,
   FavoriteBonusResult,
 } from "./favorite-bonus";
 
 export async function loadFavoriteBonusContext(supabase: SupabaseClient) {
-  const [{ data: groupMatches }, { data: knockoutMatches }] = await Promise.all([
+  const [
+    { data: groupMatches },
+    { data: knockoutMatches },
+    { data: allTeams },
+  ] = await Promise.all([
     supabase
       .from("matches")
       .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
@@ -15,11 +19,13 @@ export async function loadFavoriteBonusContext(supabase: SupabaseClient) {
       .from("matches")
       .select("*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)")
       .neq("stage", "group"),
+    supabase.from("teams").select("*"),
   ]);
 
   return {
     groupMatches: (groupMatches || []) as Match[],
     knockoutMatches: (knockoutMatches || []) as Match[],
+    allTeams: (allTeams || []) as Team[],
   };
 }
 
@@ -32,10 +38,12 @@ export async function getFavoriteBonusForUser(
     knockoutMatches: Match[];
   }
 ): Promise<FavoriteBonusResult> {
-  const ctx = context ?? (await loadFavoriteBonusContext(supabase));
+  const loaded = await loadFavoriteBonusContext(supabase);
+  const groupMatches = context?.groupMatches ?? loaded.groupMatches;
+  const knockoutMatches = context?.knockoutMatches ?? loaded.knockoutMatches;
 
   let finalPrediction: Prediction | null = null;
-  const finalMatch = ctx.knockoutMatches.find((m) => m.stage === "final");
+  const finalMatch = knockoutMatches.find((m) => m.stage === "final");
   if (finalMatch) {
     const { data } = await supabase
       .from("predictions")
@@ -47,9 +55,10 @@ export async function getFavoriteBonusForUser(
   }
 
   return calculateFavoriteTeamBonuses(favoriteTeamId, {
-    groupMatches: ctx.groupMatches,
-    knockoutMatches: ctx.knockoutMatches,
+    groupMatches,
+    knockoutMatches,
     finalPrediction,
+    allTeams: loaded.allTeams,
   });
 }
 
@@ -79,6 +88,7 @@ export async function getFavoriteBonusesForUsers(
       groupMatches: ctx.groupMatches,
       knockoutMatches: ctx.knockoutMatches,
       finalPrediction: finalPredsByUser[u.id] ?? null,
+      allTeams: ctx.allTeams,
     });
   }
   return out;

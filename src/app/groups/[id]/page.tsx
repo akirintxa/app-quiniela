@@ -264,6 +264,7 @@ export default async function GroupDetailPage({
       favoriteTeamId,
       allGroupMatches: allGroupMatches as Match[],
       allKnockoutMatches: (allKnockoutMatches ?? []) as Match[],
+      allTeams: (allTeams ?? []) as Team[],
       finalPrediction,
       favoriteTeamName,
     });
