@@ -181,7 +181,13 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
     cumulative += pts;
     const breakdown =
       p && m.result_a != null
-        ? formatPointsBreakdown(getPointsBreakdown(p as Prediction, m as Match))
+        ? formatPointsBreakdown(
+            getPointsBreakdown(
+              p as Prediction,
+              m as Match,
+              resolvedKnockoutById.get(m.id)
+            )
+          )
         : "";
 
     const resolved = knockoutLabels.get(m.id);

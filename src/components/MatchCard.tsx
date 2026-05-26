@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { Match, Prediction } from "@/types";
 import { savePrediction, fetchPoolMatchPredictions } from "@/app/actions";
 import { getKnockoutPenaltyWinnerDisplayName } from "@/lib/match-admin";
-import { calculatePoints, formatPointsBreakdown, getPointsBreakdown } from "@/lib/points";
+import {
+  calculatePoints,
+  formatPointsBreakdown,
+  getPointsBreakdown,
+  knockoutResolvedFromMatch,
+} from "@/lib/points";
 import { useAutoSavePrediction } from "@/hooks/useAutoSavePrediction";
 
 interface MatchCardProps {
@@ -85,6 +90,7 @@ export default function MatchCard({
   const [groupPredictions, setGroupPredictions] = useState<{
     predicted_a: number | null;
     predicted_b: number | null;
+    predicted_winner_id: number | null;
     points_won: number | null;
     user_id: string;
     nickname: string;
@@ -100,6 +106,7 @@ export default function MatchCard({
   }, [initialPrediction, isControlled]);
 
   const isKnockout = match.stage !== "group";
+  const knockoutResolved = isKnockout ? knockoutResolvedFromMatch(match) : null;
   const isDraw =
     effectiveScoreA !== "" &&
     effectiveScoreB !== "" &&
@@ -471,7 +478,11 @@ export default function MatchCard({
                     match.result_b != null && (
                       <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">
                         {formatPointsBreakdown(
-                          getPointsBreakdown(initialPrediction, match)
+                          getPointsBreakdown(
+                            initialPrediction,
+                            match,
+                            knockoutResolved
+                          )
                         )}
                       </span>
                     )}
@@ -587,13 +598,7 @@ export default function MatchCard({
                   pred.predicted_a != null && pred.predicted_b != null;
                 let displayPoints = pred.points_won;
                 if (isLive && hasPrediction) {
-                  displayPoints = calculatePoints(
-                    {
-                      predicted_a: pred.predicted_a!,
-                      predicted_b: pred.predicted_b!,
-                    } as Prediction,
-                    match
-                  );
+                  displayPoints = calculatePoints(pred, match, knockoutResolved);
                 }
                 return (
                   <div key={pred.user_id} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">

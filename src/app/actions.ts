@@ -8,7 +8,8 @@ import {
 } from '@/utils/supabase/admin';
 import { randomResultForMatch } from '@/lib/admin-random-scores';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
-import { calculatePoints } from '@/lib/points';
+import { calculatePoints, isKnockoutStage } from '@/lib/points';
+import { loadResolvedKnockoutMatch } from '@/lib/knockout-points-context';
 import { isTournamentStarted } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
 import {
@@ -597,8 +598,16 @@ async function updatePredictionsPoints(
 
   if (!predictions?.length) return;
 
+  const resolvedKnockout = isKnockoutStage(matchData.stage)
+    ? await loadResolvedKnockoutMatch(supabase, matchId, matchData.stage)
+    : null;
+
   for (const pred of predictions) {
-    const points = calculatePoints(pred as Prediction, matchData);
+    const points = calculatePoints(
+      pred as Prediction,
+      matchData,
+      resolvedKnockout
+    );
     const { error } = await supabase
       .from('predictions')
       .update({ points_won: points })

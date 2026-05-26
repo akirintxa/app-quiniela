@@ -58,6 +58,7 @@ export type PoolMatchPredictionRow = {
   predicted_a: number | null;
   predicted_b: number | null;
   points_won: number | null;
+  predicted_winner_id: number | null;
   phaseComplete: boolean;
 };
 
@@ -78,7 +79,7 @@ export async function fetchPoolMatchPredictionsForMembers(
 
   const { data: preds, error } = await client
     .from("predictions")
-    .select("predicted_a, predicted_b, points_won, user_id")
+    .select("predicted_a, predicted_b, predicted_winner_id, points_won, user_id")
     .eq("match_id", matchId)
     .in("user_id", memberIds);
 
@@ -94,6 +95,7 @@ export async function fetchPoolMatchPredictionsForMembers(
         nickname: member.nickname,
         predicted_a: p?.predicted_a ?? null,
         predicted_b: p?.predicted_b ?? null,
+        predicted_winner_id: p?.predicted_winner_id ?? null,
         points_won: p?.points_won ?? null,
         phaseComplete: phaseCompleteByUser[member.id] ?? false,
       };
