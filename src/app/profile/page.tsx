@@ -158,23 +158,9 @@ export default function ProfilePage() {
                 .neq("stage", "group"),
               supabase.from("teams").select("*"),
             ]);
-          let finalPrediction: Prediction | null = null;
-          const finalMatch = (knockoutMatches as Match[] | null)?.find(
-            (m) => m.stage === "final"
-          );
-          if (finalMatch) {
-            const { data: fp } = await supabase
-              .from("predictions")
-              .select("*")
-              .eq("user_id", authUser.id)
-              .eq("match_id", finalMatch.id)
-              .maybeSingle();
-            finalPrediction = (fp as Prediction) ?? null;
-          }
           favoriteBonus = calculateFavoriteTeamBonuses(favId, {
             groupMatches: (groupMatches || []) as Match[],
             knockoutMatches: (knockoutMatches || []) as Match[],
-            finalPrediction,
             allTeams: (allTeamsRows || []) as Team[],
           });
         }

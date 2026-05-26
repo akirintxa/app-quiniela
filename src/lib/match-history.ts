@@ -86,7 +86,7 @@ function bonusHistoryResultLabel(
   bonusPts: number
 ): string {
   if (bonusKey === "final_winner") {
-    return bonusPts > 0 ? "Campeón acertado" : "Campeón no acertado";
+    return bonusPts > 0 ? "Campeón" : "No campeón";
   }
   return bonusPts > 0 ? "Clasificó" : "No clasificó";
 }
@@ -132,7 +132,6 @@ export type BuildMatchHistoryInput = {
   allGroupMatches: Match[];
   allKnockoutMatches: Match[];
   allTeams: Team[];
-  finalPrediction?: Prediction | null;
   favoriteTeamName?: string | null;
 };
 
@@ -145,7 +144,6 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
     allGroupMatches,
     allKnockoutMatches,
     allTeams,
-    finalPrediction,
     favoriteTeamName,
   } = input;
 
@@ -173,7 +171,6 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
   const bonusContext = {
     groupMatches: allGroupMatches,
     knockoutMatches: allKnockoutMatches,
-    finalPrediction,
     allTeams,
     resolvedKnockoutById,
   };

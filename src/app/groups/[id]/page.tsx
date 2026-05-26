@@ -251,12 +251,6 @@ export default async function GroupDetailPage({
     const favoriteTeamName = favoriteTeamId
       ? teamsById.get(favoriteTeamId)?.name ?? null
       : null;
-    const finalPrediction =
-      hPreds.find((p) => {
-        const fm = (allKnockoutMatches as Match[]).find((m) => m.stage === "final");
-        return fm && p.match_id === fm.id;
-      }) ?? null;
-
     userHistory = buildMatchHistoryRows({
       finishedMatches: (hMatches ?? []) as Match[],
       predictions: hPreds,
@@ -265,7 +259,6 @@ export default async function GroupDetailPage({
       allGroupMatches: allGroupMatches as Match[],
       allKnockoutMatches: (allKnockoutMatches ?? []) as Match[],
       allTeams: (allTeams ?? []) as Team[],
-      finalPrediction,
       favoriteTeamName,
     });
   }

@@ -1,8 +1,7 @@
-import { Match, Prediction, Team } from "@/types";
+import { Match, Team } from "@/types";
 import { calculateStandings } from "./standings";
 import {
   getKnockoutOfficialWinnerTeamId,
-  resolvePredictedKnockoutWinnerNationalId,
   type KnockoutResolvedForWinner,
 } from "./match-admin";
 import { resolveKnockoutTeamsForLeague } from "./knockout-ui";
@@ -60,7 +59,7 @@ export const FAVORITE_BONUS_RULES = [
     key: "final_winner",
     points: 15,
     label: "Campeón del Mundial",
-    detail: "Aciertas el ganador en la final",
+    detail: "Tu equipo favorito gana la final (resultado real)",
   },
 ] as const;
 
@@ -123,7 +122,6 @@ export function calculateFavoriteTeamBonuses(
   options: {
     groupMatches: Match[];
     knockoutMatches: Match[];
-    finalPrediction?: Prediction | null;
     allTeams: Team[];
   }
 ): FavoriteBonusResult {
@@ -169,19 +167,9 @@ export function calculateFavoriteTeamBonuses(
     awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
-  const finalMatch = finishedKnockout.find((m) => m.stage === "final");
-  if (finalMatch && options.finalPrediction) {
-    const resolvedFinal = resolvedKoById.get(finalMatch.id);
-    const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
-    const predicted = resolvePredictedKnockoutWinnerNationalId(
-      options.finalPrediction,
-      finalMatch,
-      resolvedFinal
-    );
-    if (actual != null && predicted != null && actual === predicted) {
-      const r = rule("final_winner");
-      awards.push({ key: r.key, points: r.points, label: r.label });
-    }
+  if (teamWonStage(teamId, "final", finishedKnockout, resolvedKoById)) {
+    const r = rule("final_winner");
+    awards.push({ key: r.key, points: r.points, label: r.label });
   }
 
   const total = awards.reduce((sum, a) => sum + a.points, 0);
@@ -243,7 +231,6 @@ export function getFavoriteBonusPointsForHistoryPhase(
   options: {
     groupMatches: Match[];
     knockoutMatches: Match[];
-    finalPrediction?: Prediction | null;
     allTeams: Team[];
     resolvedKnockoutById?: Map<number, KnockoutResolvedForWinner>;
   }
@@ -286,18 +273,10 @@ export function getFavoriteBonusPointsForHistoryPhase(
       return teamWonStage(favoriteTeamId, "semi_final", finishedKnockout, resolvedKoById)
         ? 15
         : 0;
-    case "final_winner": {
-      const finalMatch = finishedKnockout.find((m) => m.stage === "final");
-      if (!finalMatch || !options.finalPrediction) return 0;
-      const resolvedFinal = resolvedKoById.get(finalMatch.id);
-      const actual = getKnockoutOfficialWinnerTeamId(finalMatch, resolvedFinal);
-      const predicted = resolvePredictedKnockoutWinnerNationalId(
-        options.finalPrediction,
-        finalMatch,
-        resolvedFinal
-      );
-      return actual != null && predicted != null && actual === predicted ? 15 : 0;
-    }
+    case "final_winner":
+      return teamWonStage(favoriteTeamId, "final", finishedKnockout, resolvedKoById)
+        ? 15
+        : 0;
     default:
       return 0;
   }

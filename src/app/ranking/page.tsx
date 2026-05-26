@@ -238,12 +238,6 @@ export default async function RankingPage({
     const favoriteTeamName = favoriteTeamId
       ? teams.find((t) => t.id === favoriteTeamId)?.name ?? null
       : null;
-    const finalPrediction =
-      predictions.find((p) => {
-        const fm = knockoutMatches.find((m) => m.stage === "final");
-        return fm && p.match_id === fm.id;
-      }) ?? null;
-
     userHistory = buildMatchHistoryRows({
       finishedMatches,
       predictions,
@@ -252,7 +246,6 @@ export default async function RankingPage({
       allGroupMatches: groupMatches,
       allKnockoutMatches: knockoutMatches,
       allTeams: teams,
-      finalPrediction,
       favoriteTeamName,
     });
   }
