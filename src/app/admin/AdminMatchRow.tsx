@@ -93,6 +93,20 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
     );
   };
 
+  const handleSaveCorrection = () => {
+    if (!validateScores()) return;
+    if (
+      !confirm(
+        "Este partido ya está cerrado. ¿Guardar corrección del marcador? Se recalcularán los puntos de este partido para todos los usuarios."
+      )
+    ) {
+      return;
+    }
+    return runAction(() =>
+      finalizeMatch(match.id, Number(resultA), Number(resultB), winnerId)
+    );
+  };
+
   const handleReset = () => {
     if (
       !confirm(
@@ -118,7 +132,8 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
         ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
         : "bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400";
 
-  const inputsDisabled = status === "finished" || loading;
+  const scoreInputsDisabled = loading || status === "scheduled";
+  const pasaDisabled = loading || status === "scheduled";
 
   return (
     <div
@@ -145,7 +160,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 onChange={(e) =>
                   setResultA(e.target.value === "" ? "" : Number(e.target.value))
                 }
-                disabled={inputsDisabled || status === "scheduled"}
+                disabled={scoreInputsDisabled}
                 placeholder="–"
                 className="w-14 h-14 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl disabled:opacity-50"
               />
@@ -153,7 +168,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 <button
                   type="button"
                   onClick={() => setWinnerId(match.team_a_id)}
-                  disabled={inputsDisabled}
+                  disabled={pasaDisabled}
                   className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${
                     winnerId === match.team_a_id
                       ? "bg-blue-600 text-white border-blue-600"
@@ -173,7 +188,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 onChange={(e) =>
                   setResultB(e.target.value === "" ? "" : Number(e.target.value))
                 }
-                disabled={inputsDisabled || status === "scheduled"}
+                disabled={scoreInputsDisabled}
                 placeholder="–"
                 className="w-14 h-14 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl disabled:opacity-50"
               />
@@ -181,7 +196,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 <button
                   type="button"
                   onClick={() => setWinnerId(match.team_b_id)}
-                  disabled={inputsDisabled}
+                  disabled={pasaDisabled}
                   className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${
                     winnerId === match.team_b_id
                       ? "bg-blue-600 text-white border-blue-600"
@@ -245,6 +260,14 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
               <span className="px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl font-black text-[10px] uppercase tracking-widest self-center">
                 Cerrado
               </span>
+              <button
+                type="button"
+                onClick={handleSaveCorrection}
+                disabled={loading}
+                className="px-4 py-3 bg-amber-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-700 shadow-lg shadow-amber-500/20 disabled:opacity-50"
+              >
+                Guardar corrección
+              </button>
               <button
                 type="button"
                 onClick={handleReset}

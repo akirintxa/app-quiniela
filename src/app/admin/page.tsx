@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
 import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
+import AdminRefreshButton from "./AdminRefreshButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Metadata } from "next";
@@ -83,7 +84,7 @@ export default async function AdminPage({
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
-        <header className="mb-12 flex justify-between items-end">
+        <header className="mb-12 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
           <div>
             <h1 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">
               Panel de <span className="text-red-600">Control</span>
@@ -92,12 +93,15 @@ export default async function AdminPage({
               Solo para Administradores
             </p>
             <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mt-3 max-w-md leading-relaxed">
-              1. Iniciar 0-0 · 2. Actualizar marcador (tiempo real en la app) · 3. Finalizar · ↺ Reiniciar
+              1. Iniciar 0-0 · 2. Actualizar marcador (tiempo real en la app) · 3. Finalizar · Partido cerrado: editar marcador y &quot;Guardar corrección&quot; (recalcula puntos) · ↺ Reiniciar
             </p>
           </div>
-          <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
-            Volver
-          </Link>
+          <div className="flex flex-wrap gap-2 justify-end shrink-0">
+            <AdminRefreshButton />
+            <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
+              Volver
+            </Link>
+          </div>
         </header>
 
         <div className="flex gap-2 mb-6">

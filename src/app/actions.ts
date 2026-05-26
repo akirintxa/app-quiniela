@@ -573,11 +573,11 @@ async function getAdminDb() {
 }
 
 function revalidateAfterMatchUpdate() {
-  revalidatePath('/');
-  revalidatePath('/admin');
-  revalidatePath('/ranking');
-  revalidatePath('/groups');
-  revalidatePath('/profile');
+  revalidatePath("/", "layout");
+  revalidatePath("/admin");
+  revalidatePath("/ranking");
+  revalidatePath("/groups", "layout");
+  revalidatePath("/profile");
 }
 
 async function updatePredictionsPoints(
