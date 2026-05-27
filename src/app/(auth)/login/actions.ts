@@ -18,6 +18,7 @@ import {
   setPendingSignupEmail,
 } from '@/lib/auth-pending-email'
 import { verifyEmailOtp } from '@/lib/verify-email-otp'
+import { sendLoginOtpEmail } from '@/lib/send-auth-otp'
 
 async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -143,6 +144,34 @@ export async function signup(formData: FormData) {
     await redirectAfterAuth(supabase)
   }
 
+  const { error: otpSendError } = await sendLoginOtpEmail(supabase, email)
+
+  if (otpSendError) {
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    })
+    if (resendError) {
+      redirect(
+        loginQuery({
+          mode: 'signup',
+          email,
+          message: translateError(otpSendError.message),
+        })
+      )
+    }
+    await setPendingSignupEmail(email)
+    redirect(
+      loginQuery({
+        mode: 'login',
+        status: 'awaiting_otp',
+        email,
+        message:
+          'Revisa el correo de confirmación de cuenta. Si no funciona el código, pide reenviar.',
+      })
+    )
+  }
+
   await setPendingSignupEmail(email)
   redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
 }
@@ -191,10 +220,7 @@ export async function resendSignupOtp(formData: FormData) {
 
   await setPendingSignupEmail(email)
 
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email,
-  })
+  const { error } = await sendLoginOtpEmail(supabase, email)
 
   if (error) {
     redirect(
@@ -210,7 +236,8 @@ export async function resendSignupOtp(formData: FormData) {
     loginQuery({
       status: 'awaiting_otp',
       email,
-      message: 'Te hemos enviado un código nuevo. Revisa tu correo.',
+      message:
+        'Código nuevo enviado. Usa el correo más reciente (puede llamarse «Magic Link» o acceso).',
     })
   )
 }

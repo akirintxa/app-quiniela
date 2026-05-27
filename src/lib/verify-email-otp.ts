@@ -1,5 +1,6 @@
 import type { EmailOtpType, SupabaseClient } from "@supabase/supabase-js";
 
+/** Tras signInWithOtp el tipo correcto suele ser "email". */
 const SIGNUP_OTP_TYPES: EmailOtpType[] = ["email", "signup", "magiclink"];
 
 export async function verifyEmailOtp(

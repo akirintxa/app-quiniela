@@ -91,8 +91,9 @@ function LoginContent() {
           <p className="mt-3 text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
             Puedes abrir el correo en otro móvil y pegar el código aquí
           </p>
-          <p className="mt-2 text-[9px] font-medium text-gray-400 dark:text-zinc-500">
-            Usa el código del último correo (si pides otro, el anterior deja de valer)
+          <p className="mt-2 text-[9px] font-medium text-gray-400 dark:text-zinc-500 leading-relaxed">
+            Usa el código del correo <strong>más reciente</strong> (el de acceso / magic link).
+            Si recibiste varios, ignora el de «confirmar cuenta» y usa el último.
           </p>
         </div>
 

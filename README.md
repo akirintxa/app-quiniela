@@ -80,10 +80,9 @@ This project uses Supabase for its database. Follow these steps to set up your d
     *   Supabase's built-in SMTP on free tiers has very low rate limits (~2 emails/hour).
     *   Use a custom SMTP provider (e.g. [Resend](https://resend.com)): verify your domain, then in Supabase **Authentication → Emails → SMTP** set host `smtp.resend.com`, user `resend`, password = your Resend API key.
     *   Set **Site URL** to `NEXT_PUBLIC_SITE_URL` (e.g. `https://losqq.com`) and add **Redirect URLs**: `https://losqq.com/auth/callback` (and `https://losqq.com/**` if you use wildcards).
-    *   **Email templates (important):** The app confirms signup and password recovery with a **6-digit code** entered on the same page (works if the user opens email on another device). In Supabase → **Authentication → Email Templates**, show the code prominently using `{{ .Token }}` (Supabase sends 6 digits):
-        *   **Confirm signup** example body: `Tu código para activar la cuenta: {{ .Token }}` (you can remove or de-emphasize `{{ .ConfirmationURL }}`).
-        *   **Reset password** example body: `Tu código para recuperar el acceso: {{ .Token }}`.
+    *   **Email templates (important):** Signup sends the OTP via **Magic Link** (`signInWithOtp`). In Supabase → **Authentication → Email Templates**, edit **Magic Link** (not only Confirm signup) and show: `Tu código: {{ .Token }}` (6 digits). Optional: add the same in **Reset password** for recovery codes.
     *   Ensure **Confirm email** is enabled under Authentication → Providers → Email.
+    *   Users may receive two emails after signup; they must use the code from the **latest** email (Magic Link / acceso).
     *   Test signup confirmation and password reset in staging before going live.
 
 ## Inviting players (QR / link)
