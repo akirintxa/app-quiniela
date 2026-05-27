@@ -3,6 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import GroupForms from "@/components/GroupForms";
+import {
+  joinPoolByInviteCode,
+  normalizeInviteCode,
+} from "@/lib/pool-invite";
 
 export default async function GroupsPage({
   searchParams,
@@ -72,34 +76,25 @@ export default async function GroupsPage({
   };
 
   const joinPool = async (formData: FormData) => {
-    'use server';
-    const code = (formData.get('code') as string).toUpperCase().trim();
+    "use server";
+    const code = normalizeInviteCode((formData.get("code") as string) ?? "");
     if (!code) return;
-    
+
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
 
-    const { data: pool } = await supabase.from('pools').select('id').eq('invite_code', code).maybeSingle();
-    if (!pool) return redirect('/groups?error=invalid_code');
-
-    // Verificar si ya es miembro
-    const { data: existingMember } = await supabase
-      .from('pool_members')
-      .select('pool_id')
-      .eq('pool_id', pool.id)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (existingMember) {
-      return redirect('/groups?error=already_member');
+    const result = await joinPoolByInviteCode(supabase, user.id, code);
+    if (!result.ok) {
+      if (result.error === "invalid_code") redirect("/groups?error=invalid_code");
+      redirect("/groups?error=join_failed");
     }
 
-    const { error: joinError } = await supabase.from('pool_members').upsert({ pool_id: pool.id, user_id: user.id });
-    if (joinError) return redirect('/groups?error=join_failed');
-
-    revalidatePath('/groups');
-    redirect(`/groups/${pool.id}`);
+    revalidatePath("/groups");
+    if (result.alreadyMember) redirect("/groups?error=already_member");
+    redirect(`/groups/${result.poolId}`);
   };
 
   return (

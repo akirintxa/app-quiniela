@@ -3,6 +3,31 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import {
+  consumePendingPoolInvite,
+  getPendingPoolInviteCode,
+  joinResultRedirectPath,
+} from '@/lib/pool-invite'
+
+async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/')
+  }
+
+  const pending = await consumePendingPoolInvite(supabase, user.id)
+  revalidatePath('/', 'layout')
+  revalidatePath('/groups')
+
+  if (pending) {
+    if (pending.ok) revalidatePath(`/groups/${pending.poolId}`)
+    redirect(joinResultRedirectPath(pending))
+  }
+
+  redirect('/')
+}
 
 function translateError(message: string) {
   const msg = message.toLowerCase();
@@ -30,8 +55,7 @@ export async function login(formData: FormData) {
     return redirect(`/login?message=${encodeURIComponent(translateError(error.message))}`)
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/')
+  await redirectAfterAuth(supabase)
 }
 
 export async function signup(formData: FormData) {
@@ -39,12 +63,16 @@ export async function signup(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const pendingInvite = await getPendingPoolInviteCode()
+  const emailRedirectTo = pendingInvite
+    ? `${origin}/auth/callback?next=${encodeURIComponent('/join/complete')}`
+    : `${origin}/auth/callback`
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo,
     },
   })
 
@@ -91,6 +119,5 @@ export async function updatePassword(formData: FormData) {
     return redirect(`/update-password?message=${encodeURIComponent(translateError(error.message))}`)
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/')
+  await redirectAfterAuth(supabase)
 }

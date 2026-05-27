@@ -22,6 +22,7 @@ export default function GroupForms({ createPool, joinPool }: { createPool: (fd: 
       };
     }
     if (message === 'success_create') return { text: 'Liga creada con éxito', type: 'success' };
+    if (message === 'joined') return { text: 'Te has unido a la liga', type: 'success' };
     
     return null;
   };

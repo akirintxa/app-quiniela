@@ -6,6 +6,7 @@ import MemberBadge from "@/components/MemberBadge";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import CopyInviteCode from "@/components/CopyInviteCode";
+import ShareLeagueQR from "@/components/ShareLeagueQR";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
 import DeletePoolButton from "@/components/DeletePoolButton";
 import LeagueAdminPanel from "@/components/LeagueAdminPanel";
@@ -40,12 +41,13 @@ export default async function GroupDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view_user?: string }>;
+  searchParams: Promise<{ view_user?: string; message?: string }>;
 }) {
   const supabase = await createClient();
   const { id: poolId } = await params;
   const resolvedSearchParams = await searchParams;
   const viewUserId = resolvedSearchParams.view_user;
+  const joinedMessage = resolvedSearchParams.message === "joined";
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -397,8 +399,19 @@ export default async function GroupDetailPage({
             <div className="hidden sm:block w-px h-4 bg-gray-100 dark:bg-zinc-800" />
             <LeaveGroupButton poolId={Number(poolId)} poolName={pool.name} />
           </div>
-          <CopyInviteCode code={pool.invite_code} />
+          <div className="flex flex-wrap items-center gap-2">
+            <CopyInviteCode code={pool.invite_code} />
+            <ShareLeagueQR inviteCode={pool.invite_code} />
+          </div>
         </nav>
+
+        {joinedMessage && (
+          <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900 px-5 py-3 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-green-600">
+              Te has unido a la liga
+            </p>
+          </div>
+        )}
 
         <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>

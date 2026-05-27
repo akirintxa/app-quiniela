@@ -75,3 +75,18 @@ This project uses Supabase for its database. Follow these steps to set up your d
 5.  **Set up Authentication:**
     *   Configure your desired authentication methods (e.g., Email/Password, Google, etc.) in Supabase under "Authentication" -> "Providers".
     *   Ensure your Next.js app's authentication flow (in the `(auth)` route group) integrates with Supabase authentication.
+
+6.  **Transactional email (recommended for production):**
+    *   Supabase's built-in SMTP on free tiers has very low rate limits (~2 emails/hour).
+    *   Use a custom SMTP provider (e.g. [Resend](https://resend.com)): verify your domain, then in Supabase **Project Settings → Auth → SMTP** set host `smtp.resend.com`, user `resend`, password = your Resend API key.
+    *   Set **Site URL** and **Redirect URLs** to match `NEXT_PUBLIC_SITE_URL` (e.g. `https://your-app.vercel.app/auth/callback`).
+    *   Test signup confirmation and password reset in staging before going live.
+
+## Inviting players (QR / link)
+
+Each league has a unique `invite_code`. Share it via:
+
+- **QR or link:** `{NEXT_PUBLIC_SITE_URL}/join/{invite_code}` — shown in the league page under "Compartir".
+- **Short alias:** `/?join=CODE` redirects to `/join/CODE`.
+
+Flow for new users: scan QR → cookie stores pending invite → register → confirm email → auto-join on auth callback. Logged-in users joining via `/join/CODE` are added immediately.

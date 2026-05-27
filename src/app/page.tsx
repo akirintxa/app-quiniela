@@ -5,6 +5,8 @@ import RandomizeButton from "@/components/RandomizeButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { normalizeInviteCode } from "@/lib/pool-invite";
 import { calculateStandings } from "@/lib/standings";
 import {
   buildKnockoutViewModels,
@@ -27,11 +29,21 @@ import {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ group?: string; view?: string; stage?: string }>;
+  searchParams: Promise<{
+    group?: string;
+    view?: string;
+    stage?: string;
+    join?: string;
+  }>;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const resolvedSearchParams = await searchParams;
+
+  const joinCode = resolvedSearchParams.join?.trim();
+  if (joinCode) {
+    redirect(`/join/${normalizeInviteCode(joinCode)}`);
+  }
 
   // --- LANDING PAGE FOR NON-LOGGED USERS ---
   if (!user) {
