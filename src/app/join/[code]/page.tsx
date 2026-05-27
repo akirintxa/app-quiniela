@@ -7,7 +7,6 @@ import {
   joinPoolByInviteCode,
   joinResultRedirectPath,
   normalizeInviteCode,
-  setPendingPoolInviteCookie,
 } from "@/lib/pool-invite";
 
 export default async function JoinPoolPage({
@@ -45,8 +44,6 @@ export default async function JoinPoolPage({
       </div>
     );
   }
-
-  await setPendingPoolInviteCookie(code);
 
   const {
     data: { user },

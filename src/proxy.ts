@@ -1,5 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  PENDING_POOL_INVITE_COOKIE,
+  pendingPoolInviteCookieOptions,
+} from "@/lib/pool-invite";
+import { normalizeInviteCode } from "@/lib/join-url";
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -27,6 +32,18 @@ export async function proxy(request: NextRequest) {
 
   // Refresca la sesión para que server actions envíen el JWT a PostgREST (RLS)
   await supabase.auth.getUser();
+
+  const joinMatch = request.nextUrl.pathname.match(/^\/join\/([^/]+)\/?$/);
+  if (joinMatch && joinMatch[1] !== "complete") {
+    const code = normalizeInviteCode(joinMatch[1]);
+    if (code) {
+      supabaseResponse.cookies.set(
+        PENDING_POOL_INVITE_COOKIE,
+        code,
+        pendingPoolInviteCookieOptions()
+      );
+    }
+  }
 
   return supabaseResponse;
 }

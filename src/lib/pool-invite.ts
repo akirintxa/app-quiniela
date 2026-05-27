@@ -7,6 +7,17 @@ export { getJoinUrl, normalizeInviteCode };
 export const PENDING_POOL_INVITE_COOKIE = "pending_pool_invite";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
+/** Opciones compartidas (proxy / route handlers; no usar en Server Components). */
+export function pendingPoolInviteCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: COOKIE_MAX_AGE,
+    path: "/",
+  };
+}
+
 export type JoinPoolResult =
   | { ok: true; poolId: number; alreadyMember: boolean }
   | { ok: false; error: "invalid_code" | "join_failed" | "not_authenticated" };
@@ -17,16 +28,14 @@ export type PoolInvitePreview = {
   invite_code: string;
 };
 
+/** Solo en Server Actions o Route Handlers (no en páginas RSC). */
 export async function setPendingPoolInviteCookie(code: string) {
   const jar = await cookies();
-  const isProd = process.env.NODE_ENV === "production";
-  jar.set(PENDING_POOL_INVITE_COOKIE, normalizeInviteCode(code), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProd,
-    maxAge: COOKIE_MAX_AGE,
-    path: "/",
-  });
+  jar.set(
+    PENDING_POOL_INVITE_COOKIE,
+    normalizeInviteCode(code),
+    pendingPoolInviteCookieOptions()
+  );
 }
 
 export async function getPendingPoolInviteCode(): Promise<string | null> {
