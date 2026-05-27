@@ -9,6 +9,7 @@ import {
   resendRecoveryOtp,
 } from '../login/actions';
 import { maskEmail } from '@/lib/mask-email';
+import { normalizeAuthEmail } from '@/lib/normalize-auth-email';
 import OtpCodeInput from '@/components/OtpCodeInput';
 
 function ForgotPasswordContent() {
@@ -16,7 +17,7 @@ function ForgotPasswordContent() {
   const [isPending, startTransition] = useTransition();
 
   const status = searchParams.get('status');
-  const emailParam = searchParams.get('email') ?? '';
+  const emailParam = normalizeAuthEmail(searchParams.get('email') ?? '');
   const errorMessage = searchParams.get('error');
   const infoMessage = searchParams.get('message');
   const isSent = status === 'sent' && !!emailParam;

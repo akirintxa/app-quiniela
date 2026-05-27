@@ -7,6 +7,7 @@ import { login, signup, verifySignupOtp, resendSignupOtp } from './actions';
 import PasswordInput from '@/components/PasswordInput';
 import OtpCodeInput from '@/components/OtpCodeInput';
 import { maskEmail } from '@/lib/mask-email';
+import { normalizeAuthEmail } from '@/lib/normalize-auth-email';
 
 type AuthMode = 'login' | 'signup';
 
@@ -27,7 +28,7 @@ function LoginContent() {
   const errorCode = searchParams.get('error');
   const status = searchParams.get('status');
   const legacyMessage = searchParams.get('message');
-  const prefilledEmail = searchParams.get('email') ?? '';
+  const prefilledEmail = normalizeAuthEmail(searchParams.get('email') ?? '');
 
   const awaitingOtp = status === 'awaiting_otp' && !!prefilledEmail;
 
@@ -89,6 +90,9 @@ function LoginContent() {
           </p>
           <p className="mt-3 text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
             Puedes abrir el correo en otro móvil y pegar el código aquí
+          </p>
+          <p className="mt-2 text-[9px] font-medium text-gray-400 dark:text-zinc-500">
+            Usa el código del último correo (si pides otro, el anterior deja de valer)
           </p>
         </div>
 

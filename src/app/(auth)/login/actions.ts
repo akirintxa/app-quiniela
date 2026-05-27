@@ -8,6 +8,16 @@ import {
   getPendingPoolInviteCode,
   joinResultRedirectPath,
 } from '@/lib/pool-invite'
+import {
+  clearPendingRecoveryEmail,
+  clearPendingSignupEmail,
+  getPendingRecoveryEmail,
+  getPendingSignupEmail,
+  normalizeAuthEmail,
+  setPendingRecoveryEmail,
+  setPendingSignupEmail,
+} from '@/lib/auth-pending-email'
+import { verifyEmailOtp } from '@/lib/verify-email-otp'
 
 async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -80,6 +90,7 @@ export async function login(formData: FormData) {
       )
     }
     if (msg.includes('email not confirmed')) {
+      await setPendingSignupEmail(email)
       redirect(
         loginQuery({
           status: 'awaiting_otp',
@@ -102,18 +113,13 @@ export async function login(formData: FormData) {
 
 export async function signup(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
+  const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
+
   const password = formData.get('password') as string
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  // Redirect fijo; la invitación pendiente va en cookie (compatible con enlaces token_hash del email)
-  const emailRedirectTo = `${origin}/auth/callback`
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      emailRedirectTo,
-    },
   })
 
   if (error) {
@@ -133,15 +139,19 @@ export async function signup(formData: FormData) {
   }
 
   if (data.session) {
+    await clearPendingSignupEmail()
     await redirectAfterAuth(supabase)
   }
 
+  await setPendingSignupEmail(email)
   redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
 }
 
 export async function verifySignupOtp(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
+  const cookieEmail = await getPendingSignupEmail()
+  const formEmail = normalizeAuthEmail((formData.get('email') as string) ?? '')
+  const email = cookieEmail || formEmail
   const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
 
   if (!email || token.length < 6) {
@@ -154,41 +164,32 @@ export async function verifySignupOtp(formData: FormData) {
     )
   }
 
-  let { error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'signup',
-  })
+  const result = await verifyEmailOtp(supabase, email, token)
 
-  if (error) {
-    const fallback = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
-    })
-    error = fallback.error
-  }
-
-  if (error) {
+  if (!result.ok) {
     redirect(
       loginQuery({
         status: 'awaiting_otp',
         email,
-        message: translateError(error.message),
+        message: translateError(result.message),
       })
     )
   }
 
+  await clearPendingSignupEmail()
   await redirectAfterAuth(supabase)
 }
 
 export async function resendSignupOtp(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
+  const cookieEmail = await getPendingSignupEmail()
+  const email = cookieEmail || normalizeAuthEmail((formData.get('email') as string) ?? '')
 
   if (!email) {
     redirect(loginQuery({ mode: 'signup', message: 'Indica tu correo electrónico.' }))
   }
+
+  await setPendingSignupEmail(email)
 
   const { error } = await supabase.auth.resend({
     type: 'signup',
@@ -216,12 +217,9 @@ export async function resendSignupOtp(formData: FormData) {
 
 export async function forgotPassword(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?next=/update-password`,
-  })
+  const { error } = await supabase.auth.resetPasswordForEmail(email)
 
   if (error) {
     redirect(
@@ -229,6 +227,7 @@ export async function forgotPassword(formData: FormData) {
     )
   }
 
+  await setPendingRecoveryEmail(email)
   redirect(
     `/forgot-password?status=sent&email=${encodeURIComponent(email)}`
   )
@@ -236,7 +235,9 @@ export async function forgotPassword(formData: FormData) {
 
 export async function verifyRecoveryOtp(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
+  const cookieEmail = await getPendingRecoveryEmail()
+  const formEmail = normalizeAuthEmail((formData.get('email') as string) ?? '')
+  const email = cookieEmail || formEmail
   const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
 
   if (!email || token.length < 6) {
@@ -245,33 +246,34 @@ export async function verifyRecoveryOtp(formData: FormData) {
     )
   }
 
-  const { error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'recovery',
-  })
+  const result = await verifyEmailOtp(supabase, email, token, [
+    'recovery',
+    'email',
+  ])
 
-  if (error) {
+  if (!result.ok) {
     redirect(
-      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(error.message))}`
+      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(result.message))}`
     )
   }
 
+  await clearPendingRecoveryEmail()
   redirect('/update-password')
 }
 
 export async function resendRecoveryOtp(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const cookieEmail = await getPendingRecoveryEmail()
+  const email =
+    cookieEmail || normalizeAuthEmail((formData.get('email') as string) ?? '')
 
   if (!email) {
     redirect('/forgot-password?error=' + encodeURIComponent('Indica tu correo.'))
   }
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?next=/update-password`,
-  })
+  await setPendingRecoveryEmail(email)
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email)
 
   if (error) {
     redirect(
