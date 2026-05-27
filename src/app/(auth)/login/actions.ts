@@ -41,9 +41,26 @@ function translateError(message: string) {
   return 'Ha ocurrido un error. Inténtalo de nuevo.';
 }
 
+function loginQuery(params: {
+  mode?: 'login' | 'signup'
+  error?: string
+  status?: string
+  email?: string
+  message?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.mode) q.set('mode', params.mode)
+  if (params.error) q.set('error', params.error)
+  if (params.status) q.set('status', params.status)
+  if (params.email) q.set('email', params.email)
+  if (params.message) q.set('message', params.message)
+  const s = q.toString()
+  return s ? `/login?${s}` : '/login'
+}
+
 export async function login(formData: FormData) {
   const supabase = await createClient()
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.trim() ?? ''
   const password = formData.get('password') as string
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -52,7 +69,19 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    return redirect(`/login?message=${encodeURIComponent(translateError(error.message))}`)
+    const msg = error.message.toLowerCase()
+    if (msg.includes('invalid login credentials')) {
+      redirect(
+        loginQuery({ mode: 'login', error: 'invalid_credentials', email })
+      )
+    }
+    redirect(
+      loginQuery({
+        mode: 'login',
+        message: translateError(error.message),
+        email,
+      })
+    )
   }
 
   await redirectAfterAuth(supabase)
@@ -60,7 +89,7 @@ export async function login(formData: FormData) {
 
 export async function signup(formData: FormData) {
   const supabase = await createClient()
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.trim() ?? ''
   const password = formData.get('password') as string
   const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const pendingInvite = await getPendingPoolInviteCode()
@@ -76,24 +105,28 @@ export async function signup(formData: FormData) {
     },
   })
 
-  // Si Supabase devuelve un error claro
   if (error) {
-    return redirect(`/login?message=${encodeURIComponent(translateError(error.message))}`)
+    redirect(
+      loginQuery({
+        mode: 'signup',
+        message: translateError(error.message),
+        email,
+      })
+    )
   }
 
-  // Si el usuario ya existe pero no se ha confirmado, Supabase a veces devuelve data.user pero sin identidades nuevas
-  // Para forzar el mensaje de "ya registrado" si la configuración de Supabase es estricta:
   if (data.user && data.user.identities && data.user.identities.length === 0) {
-    return redirect(`/login?message=${encodeURIComponent('Este correo ya está registrado.')}`)
+    redirect(
+      loginQuery({ mode: 'login', error: 'already_registered', email })
+    )
   }
 
-  // Mensaje de éxito limpio sin caracteres especiales conflictivos
-  return redirect('/login?message=' + encodeURIComponent('Registro casi listo. Revisa tu email para activar tu cuenta.'))
+  redirect(loginQuery({ mode: 'login', status: 'confirm_email', email }))
 }
 
 export async function forgotPassword(formData: FormData) {
   const supabase = await createClient()
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.trim() ?? ''
   const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -101,10 +134,14 @@ export async function forgotPassword(formData: FormData) {
   })
 
   if (error) {
-    return redirect(`/forgot-password?message=${encodeURIComponent(translateError(error.message))}`)
+    redirect(
+      `/forgot-password?error=${encodeURIComponent(translateError(error.message))}`
+    )
   }
 
-  return redirect('/forgot-password?message=' + encodeURIComponent('Revisa tu email para el enlace de recuperación.'))
+  redirect(
+    `/forgot-password?status=sent&email=${encodeURIComponent(email)}`
+  )
 }
 
 export async function updatePassword(formData: FormData) {

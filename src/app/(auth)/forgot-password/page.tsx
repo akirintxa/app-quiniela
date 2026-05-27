@@ -1,53 +1,105 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { forgotPassword } from '../login/actions';
+import { maskEmail } from '@/lib/mask-email';
+
+const NEUTRAL_SENT_MESSAGE =
+  'Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.';
 
 function ForgotPasswordContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const [message, setMessage] = useState<string | null>(searchParams.get('message'));
+  const status = searchParams.get('status');
+  const emailParam = searchParams.get('email') ?? '';
+  const errorMessage = searchParams.get('error');
+  const isSent = status === 'sent';
 
-  useEffect(() => {
-    setMessage(searchParams.get('message'));
-  }, [searchParams]);
-
-  const clearMessage = () => {
-    if (message) {
-      setMessage(null);
-      router.replace('/forgot-password');
-    }
-  };
+  if (isSent) {
+    const masked = emailParam ? maskEmail(emailParam) : null;
+    return (
+      <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800 text-center">
+        <div className="w-14 h-14 mx-auto mb-6 rounded-2xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect width="20" height="16" x="2" y="4" rx="2" />
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+          </svg>
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-4">
+          Revisa tu correo
+        </p>
+        <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-relaxed mb-2">
+          {NEUTRAL_SENT_MESSAGE}
+        </p>
+        {masked && (
+          <p className="text-[10px] font-mono text-gray-400 dark:text-zinc-500 mb-8">
+            {masked}
+          </p>
+        )}
+        <div className="flex flex-col gap-3">
+          <Link
+            href="/login"
+            className="w-full inline-block bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+          >
+            Volver al login
+          </Link>
+          <Link
+            href="/forgot-password"
+            className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-colors"
+          >
+            ¿No llegó? Reenviar enlace
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
       <form className="space-y-6">
+        {errorMessage && (
+          <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400">
+            {errorMessage}
+          </div>
+        )}
+
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1" htmlFor="email">
+          <label
+            className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1"
+            htmlFor="email"
+          >
             Correo Electrónico
           </label>
-          <input 
-            className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all" 
-            name="email" 
-            type="email" 
-            placeholder="tu@email.com" 
-            onFocus={clearMessage}
-            onChange={clearMessage}
-            required 
+          <input
+            className="block w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all"
+            name="email"
+            id="email"
+            type="email"
+            placeholder="tu@email.com"
+            defaultValue={emailParam}
+            required
           />
         </div>
 
         <div className="pt-2">
-          <button formAction={forgotPassword} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95">Enviar Enlace</button>
+          <button
+            formAction={forgotPassword}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+          >
+            Enviar enlace
+          </button>
         </div>
-
-        {message && (
-          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 text-center rounded-2xl text-[10px] font-black uppercase tracking-widest animate-in fade-in slide-in-from-top-1">
-            {message}
-          </div>
-        )}
       </form>
     </div>
   );
@@ -60,13 +112,28 @@ export default function ForgotPasswordPage() {
         href="/login"
         className="absolute left-8 top-8 py-2 px-4 rounded-2xl no-underline text-gray-500 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 flex items-center group text-xs font-black uppercase tracking-widest hover:border-blue-500 transition-all shadow-sm"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="mr-2 transition-transform group-hover:-translate-x-1"><polyline points="15 18 9 12 15 6" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="mr-2 transition-transform group-hover:-translate-x-1"
+        >
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
         Volver
       </Link>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-[2rem] shadow-xl shadow-blue-500/20 mb-6 transform -rotate-6 transition-transform hover:rotate-0">
-          <span className="text-3xl font-black text-white tracking-tighter">Q26</span>
+          <span className="text-3xl font-black text-white tracking-tighter">
+            Q26
+          </span>
         </div>
         <h2 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-tight">
           RECUPERAR <span className="text-blue-600">ACCESO</span>
@@ -77,7 +144,13 @@ export default function ForgotPasswordPage() {
       </div>
 
       <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-md">
-        <Suspense fallback={<div className="p-12 text-center opacity-50 font-black text-[10px] uppercase tracking-widest">Cargando...</div>}>
+        <Suspense
+          fallback={
+            <div className="p-12 text-center opacity-50 font-black text-[10px] uppercase tracking-widest">
+              Cargando...
+            </div>
+          }
+        >
           <ForgotPasswordContent />
         </Suspense>
       </div>

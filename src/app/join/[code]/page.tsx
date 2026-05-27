@@ -77,13 +77,13 @@ export default async function JoinPoolPage({
 
         <div className="flex flex-col gap-3">
           <Link
-            href="/login"
+            href="/login?mode=signup"
             className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20"
           >
             Crear cuenta
           </Link>
           <Link
-            href="/login"
+            href="/login?mode=login"
             className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:opacity-90 transition-opacity"
           >
             Ya tengo cuenta
