@@ -92,10 +92,8 @@ export async function signup(formData: FormData) {
   const email = (formData.get('email') as string)?.trim() ?? ''
   const password = formData.get('password') as string
   const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  const pendingInvite = await getPendingPoolInviteCode()
-  const emailRedirectTo = pendingInvite
-    ? `${origin}/auth/callback?next=${encodeURIComponent('/join/complete')}`
-    : `${origin}/auth/callback`
+  // Redirect fijo; la invitación pendiente va en cookie (compatible con enlaces token_hash del email)
+  const emailRedirectTo = `${origin}/auth/callback`
 
   const { data, error } = await supabase.auth.signUp({
     email,
