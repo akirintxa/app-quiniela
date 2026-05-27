@@ -8,20 +8,14 @@ import {
   getPendingPoolInviteCode,
   joinResultRedirectPath,
 } from '@/lib/pool-invite'
-import {
-  clearPendingRecoveryEmail,
-  clearPendingSignupEmail,
-  clearPendingSignupPassword,
-  getPendingRecoveryEmail,
-  getPendingSignupEmail,
-  getPendingSignupPassword,
-  normalizeAuthEmail,
-  setPendingRecoveryEmail,
-  setPendingSignupEmail,
-  setPendingSignupPassword,
-} from '@/lib/auth-pending-email'
-import { verifyEmailOtp } from '@/lib/verify-email-otp'
-import { sendLoginOtpEmail } from '@/lib/send-auth-otp'
+import { normalizeAuthEmail } from '@/lib/normalize-auth-email'
+
+function authCallbackUrl(origin: string, withJoinComplete: boolean) {
+  if (withJoinComplete) {
+    return `${origin}/auth/callback?next=${encodeURIComponent('/join/complete')}`
+  }
+  return `${origin}/auth/callback`
+}
 
 async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -50,12 +44,8 @@ function translateError(message: string) {
   if (msg.includes('email rate limit exceeded')) return 'Demasiados intentos. Espera un minuto.';
   if (msg.includes('password is too short')) return 'La contraseña debe tener al menos 6 caracteres.';
   if (msg.includes('invalid email')) return 'El formato del correo no es válido.';
-  if (msg.includes('confirmation_url_expired')) return 'El enlace de confirmación ha caducado.';
+  if (msg.includes('confirmation_url_expired')) return 'El enlace ha caducado. Pide otro correo de confirmación.';
   if (msg.includes('user not found')) return 'Usuario no encontrado.';
-  if (msg.includes('otp_expired')) return 'El código ha caducado. Solicita uno nuevo.';
-  if (msg.includes('otp_disabled')) return 'El código no es válido. Comprueba los dígitos.';
-  if (msg.includes('token has expired') || msg.includes('invalid token'))
-    return 'Código incorrecto o caducado.';
   return 'Ha ocurrido un error. Inténtalo de nuevo.';
 }
 
@@ -78,7 +68,7 @@ function loginQuery(params: {
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
-  const email = (formData.get('email') as string)?.trim() ?? ''
+  const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
   const password = formData.get('password') as string
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -94,13 +84,12 @@ export async function login(formData: FormData) {
       )
     }
     if (msg.includes('email not confirmed')) {
-      await setPendingSignupEmail(normalizeAuthEmail(email))
-      await sendLoginOtpEmail(supabase, normalizeAuthEmail(email))
       redirect(
         loginQuery({
-          status: 'awaiting_otp',
-          email: normalizeAuthEmail(email),
-          message: 'Confirma tu cuenta con el código del correo de acceso (Magic Link).',
+          status: 'check_email',
+          email,
+          message:
+            'Confirma tu cuenta con el enlace del último correo que te enviamos.',
         })
       )
     }
@@ -120,25 +109,25 @@ export async function signup(formData: FormData) {
   const supabase = await createClient()
   const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
   const password = formData.get('password') as string
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const pendingInvite = await getPendingPoolInviteCode()
+  const emailRedirectTo = authCallbackUrl(origin, !!pendingInvite)
 
   if (!email || !password) {
     redirect(loginQuery({ mode: 'signup', message: 'Email y contraseña son obligatorios.' }))
   }
 
-  await setPendingSignupEmail(email)
-  await clearPendingSignupPassword()
-
-  // signUp dispara el correo "Confirm signup" (fiable con Confirm email ON)
-  const { data, error: signUpError } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: { emailRedirectTo },
   })
 
-  if (signUpError) {
+  if (error) {
     redirect(
       loginQuery({
         mode: 'signup',
-        message: translateError(signUpError.message),
+        message: translateError(error.message),
         email,
       })
     )
@@ -149,120 +138,49 @@ export async function signup(formData: FormData) {
   }
 
   if (data.session) {
-    await clearPendingSignupEmail()
     await redirectAfterAuth(supabase)
-  }
-
-  // Segundo correo: plantilla Magic Link (código que valida con type email)
-  const { error: magicOtpError } = await sendLoginOtpEmail(supabase, email)
-
-  if (magicOtpError) {
-    console.error('sendLoginOtpEmail after signUp:', magicOtpError.message)
-    redirect(
-      loginQuery({
-        mode: 'login',
-        status: 'awaiting_otp',
-        email,
-        message:
-          'Revisa tu correo (confirmación de cuenta). Si no llega nada en 2 min, pulsa Reenviar código.',
-      })
-    )
   }
 
   redirect(
     loginQuery({
       mode: 'login',
-      status: 'awaiting_otp',
+      status: 'check_email',
       email,
       message:
-        'Te hemos enviado un código por correo. Si llegan dos emails, usa el de «Magic Link» / acceso.',
+        'Revisa tu correo y haz clic en el enlace de confirmación para activar tu cuenta.',
     })
   )
 }
 
-export async function verifySignupOtp(formData: FormData) {
+/** Reenvía el correo de confirmación (enlace, no código). */
+export async function resendConfirmationEmail(formData: FormData) {
   const supabase = await createClient()
-  const cookieEmail = await getPendingSignupEmail()
-  const formEmail = normalizeAuthEmail((formData.get('email') as string) ?? '')
-  const email = cookieEmail || formEmail
-  const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
-
-  if (!email || token.length < 6) {
-    redirect(
-      loginQuery({
-        status: 'awaiting_otp',
-        email,
-        message: 'Introduce el código de 6 dígitos del correo.',
-      })
-    )
-  }
-
-  const result = await verifyEmailOtp(supabase, email, token, ['email', 'signup'])
-
-  if (!result.ok) {
-    redirect(
-      loginQuery({
-        status: 'awaiting_otp',
-        email,
-        message: translateError(result.message),
-      })
-    )
-  }
-
-  const pendingPassword = await getPendingSignupPassword()
-  if (pendingPassword) {
-    const { error: pwError } = await supabase.auth.updateUser({
-      password: pendingPassword,
-    })
-    await clearPendingSignupPassword()
-    if (pwError) {
-      redirect(
-        loginQuery({
-          status: 'awaiting_otp',
-          email,
-          message: translateError(pwError.message),
-        })
-      )
-    }
-  }
-
-  await clearPendingSignupEmail()
-  await redirectAfterAuth(supabase)
-}
-
-export async function resendSignupOtp(formData: FormData) {
-  const supabase = await createClient()
-  const cookieEmail = await getPendingSignupEmail()
-  const email = cookieEmail || normalizeAuthEmail((formData.get('email') as string) ?? '')
+  const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
 
   if (!email) {
     redirect(loginQuery({ mode: 'signup', message: 'Indica tu correo electrónico.' }))
   }
 
-  await setPendingSignupEmail(email)
-
-  const { error: resendError } = await supabase.auth.resend({
+  const { error } = await supabase.auth.resend({
     type: 'signup',
     email,
   })
 
-  const { error: magicOtpError } = await sendLoginOtpEmail(supabase, email)
-
-  if (resendError && magicOtpError) {
+  if (error) {
     redirect(
       loginQuery({
-        status: 'awaiting_otp',
+        status: 'check_email',
         email,
-        message: translateError(resendError.message),
+        message: translateError(error.message),
       })
     )
   }
 
   redirect(
     loginQuery({
-      status: 'awaiting_otp',
+      status: 'check_email',
       email,
-      message: 'Código reenviado. Revisa el correo más reciente (Magic Link o confirmación).',
+      message: 'Correo reenviado. Haz clic en el enlace del mensaje más reciente.',
     })
   )
 }
@@ -270,8 +188,11 @@ export async function resendSignupOtp(formData: FormData) {
 export async function forgotPassword(formData: FormData) {
   const supabase = await createClient()
   const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email)
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/update-password`,
+  })
 
   if (error) {
     redirect(
@@ -279,62 +200,8 @@ export async function forgotPassword(formData: FormData) {
     )
   }
 
-  await setPendingRecoveryEmail(email)
   redirect(
     `/forgot-password?status=sent&email=${encodeURIComponent(email)}`
-  )
-}
-
-export async function verifyRecoveryOtp(formData: FormData) {
-  const supabase = await createClient()
-  const cookieEmail = await getPendingRecoveryEmail()
-  const formEmail = normalizeAuthEmail((formData.get('email') as string) ?? '')
-  const email = cookieEmail || formEmail
-  const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
-
-  if (!email || token.length < 6) {
-    redirect(
-      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent('Introduce el código de 6 dígitos.')}`
-    )
-  }
-
-  const result = await verifyEmailOtp(supabase, email, token, [
-    'recovery',
-    'email',
-  ])
-
-  if (!result.ok) {
-    redirect(
-      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(result.message))}`
-    )
-  }
-
-  await clearPendingRecoveryEmail()
-  redirect('/update-password')
-}
-
-export async function resendRecoveryOtp(formData: FormData) {
-  const supabase = await createClient()
-  const cookieEmail = await getPendingRecoveryEmail()
-  const email =
-    cookieEmail || normalizeAuthEmail((formData.get('email') as string) ?? '')
-
-  if (!email) {
-    redirect('/forgot-password?error=' + encodeURIComponent('Indica tu correo.'))
-  }
-
-  await setPendingRecoveryEmail(email)
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email)
-
-  if (error) {
-    redirect(
-      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(error.message))}`
-    )
-  }
-
-  redirect(
-    `/forgot-password?status=sent&email=${encodeURIComponent(email)}&message=${encodeURIComponent('Código nuevo enviado. Revisa tu correo.')}`
   )
 }
 

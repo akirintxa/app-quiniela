@@ -3,9 +3,8 @@
 import { useState, useTransition, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { login, signup, verifySignupOtp, resendSignupOtp } from './actions';
+import { login, signup, resendConfirmationEmail } from './actions';
 import PasswordInput from '@/components/PasswordInput';
-import OtpCodeInput from '@/components/OtpCodeInput';
 import { maskEmail } from '@/lib/mask-email';
 import { normalizeAuthEmail } from '@/lib/normalize-auth-email';
 
@@ -30,38 +29,31 @@ function LoginContent() {
   const legacyMessage = searchParams.get('message');
   const prefilledEmail = normalizeAuthEmail(searchParams.get('email') ?? '');
 
-  const awaitingOtp = status === 'awaiting_otp' && !!prefilledEmail;
+  const checkEmail =
+    (status === 'check_email' || status === 'awaiting_otp') && !!prefilledEmail;
 
   useEffect(() => {
-    if (!awaitingOtp) {
+    if (!checkEmail) {
       setMode(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
     }
-  }, [searchParams, awaitingOtp]);
-
-  const isLegacySuccess =
-    !!legacyMessage &&
-    (legacyMessage.includes('Registro') ||
-      legacyMessage.includes('completado') ||
-      legacyMessage.toLowerCase().includes('revisa tu email'));
+  }, [searchParams, checkEmail]);
 
   const errorText =
     (errorCode && ERROR_COPY[errorCode]) ||
-    (legacyMessage && !isLegacySuccess && status !== 'awaiting_otp'
+    (legacyMessage &&
+    !legacyMessage.toLowerCase().includes('revisa') &&
+    !legacyMessage.toLowerCase().includes('correo') &&
+    !legacyMessage.toLowerCase().includes('reenviado') &&
+    !legacyMessage.toLowerCase().includes('confirmación') &&
+    status !== 'check_email'
       ? legacyMessage
       : null);
 
-  const otpMessage =
-    awaitingOtp && legacyMessage ? legacyMessage : null;
-
-  const successText =
-    status === 'confirm_email'
-      ? 'Registro casi listo. Revisa tu email para activar tu cuenta.'
-      : isLegacySuccess && !awaitingOtp
-        ? legacyMessage
-        : null;
+  const infoMessage =
+    checkEmail && legacyMessage ? legacyMessage : null;
 
   const showSignupAfterFailedLogin =
-    mode === 'login' && errorCode === 'invalid_credentials' && !awaitingOtp;
+    mode === 'login' && errorCode === 'invalid_credentials' && !checkEmail;
 
   const handleFormAction = (action: (formData: FormData) => Promise<void>) => {
     return (formData: FormData) => {
@@ -71,11 +63,7 @@ function LoginContent() {
     };
   };
 
-  const setAuthMode = (next: AuthMode) => {
-    setMode(next);
-  };
-
-  if (awaitingOtp) {
+  if (checkEmail) {
     return (
       <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
         <div className="text-center mb-6">
@@ -83,61 +71,39 @@ function LoginContent() {
             Confirma tu cuenta
           </p>
           <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-relaxed">
-            Te enviamos un código de <strong>6 dígitos</strong> a{' '}
+            Te enviamos un correo a{' '}
             <span className="font-mono text-gray-900 dark:text-white">
               {maskEmail(prefilledEmail)}
             </span>
           </p>
-          <p className="mt-3 text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
-            Puedes abrir el correo en otro móvil y pegar el código aquí
-          </p>
-          <p className="mt-2 text-[9px] font-medium text-gray-400 dark:text-zinc-500 leading-relaxed">
-            Puede llegar 1 o 2 correos. Usa el código del email{' '}
-            <strong>«Your Magic Link»</strong> (Tu código para entrar en Q26). Si solo
-            llega uno de confirmación, prueba ese código o pulsa Reenviar.
+          <p className="mt-4 text-sm text-gray-600 dark:text-zinc-400 leading-relaxed">
+            Abre el mensaje y pulsa el <strong>enlace de confirmación</strong>.
+            Puedes hacerlo en el móvil: al abrir el enlace entrarás en la web
+            ya activada.
           </p>
         </div>
 
-        <form className="space-y-6">
-          <input type="hidden" name="email" value={prefilledEmail} />
-
-          {otpMessage && (
-            <div
-              className={`p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border ${
-                otpMessage.toLowerCase().includes('nuevo')
-                  ? 'bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/30 text-green-600'
-                  : 'bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600'
-              }`}
-            >
-              {otpMessage}
-            </div>
-          )}
-
-          <div>
-            <label
-              className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1 text-center"
-              htmlFor="token"
-            >
-              Código de verificación
-            </label>
-            <OtpCodeInput autoFocus />
+        {infoMessage && (
+          <div className="mb-6 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400">
+            {infoMessage}
           </div>
+        )}
 
-          <button
-            formAction={handleFormAction(verifySignupOtp)}
-            disabled={isPending}
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
-          >
-            {isPending ? 'Verificando...' : 'Confirmar y entrar'}
-          </button>
+        {errorText && (
+          <div className="mb-6 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400">
+            {errorText}
+          </div>
+        )}
 
+        <form className="space-y-4">
+          <input type="hidden" name="email" value={prefilledEmail} />
           <button
             type="submit"
-            formAction={handleFormAction(resendSignupOtp)}
+            formAction={handleFormAction(resendConfirmationEmail)}
             disabled={isPending}
-            className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+            className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors disabled:opacity-50"
           >
-            Reenviar código
+            {isPending ? 'Enviando...' : 'Reenviar correo de confirmación'}
           </button>
         </form>
 
@@ -158,7 +124,7 @@ function LoginContent() {
       <div className="flex rounded-2xl bg-gray-50 dark:bg-zinc-800 p-1 mb-6">
         <button
           type="button"
-          onClick={() => setAuthMode('login')}
+          onClick={() => setMode('login')}
           className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
             mode === 'login'
               ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-sm'
@@ -169,7 +135,7 @@ function LoginContent() {
         </button>
         <button
           type="button"
-          onClick={() => setAuthMode('signup')}
+          onClick={() => setMode('signup')}
           className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
             mode === 'signup'
               ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-sm'
@@ -181,12 +147,6 @@ function LoginContent() {
       </div>
 
       <form className="space-y-6">
-        {successText && (
-          <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400">
-            {successText}
-          </div>
-        )}
-
         {errorText && (
           <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400">
             {errorText}
@@ -257,11 +217,11 @@ function LoginContent() {
                 ¿Eres nuevo?
               </p>
               <button
-                formAction={handleFormAction(signup)}
-                disabled={isPending}
-                className="w-full py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-zinc-300 hover:border-blue-500 hover:text-blue-600 transition-all disabled:opacity-50"
+                type="button"
+                onClick={() => setMode('signup')}
+                className="w-full py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-zinc-300 hover:border-blue-500 hover:text-blue-600 transition-all"
               >
-                {isPending ? 'Registrando...' : 'Crear cuenta con este email'}
+                Crear cuenta con este email
               </button>
             </div>
           )}
