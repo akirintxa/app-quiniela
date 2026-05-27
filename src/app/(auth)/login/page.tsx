@@ -92,8 +92,9 @@ function LoginContent() {
             Puedes abrir el correo en otro móvil y pegar el código aquí
           </p>
           <p className="mt-2 text-[9px] font-medium text-gray-400 dark:text-zinc-500 leading-relaxed">
-            Busca el correo con asunto tipo <strong>«Your Magic Link»</strong> (o el que
-            hayas puesto) y el texto «Tu código para entrar en Q26».
+            Puede llegar 1 o 2 correos. Usa el código del email{' '}
+            <strong>«Your Magic Link»</strong> (Tu código para entrar en Q26). Si solo
+            llega uno de confirmación, prueba ese código o pulsa Reenviar.
           </p>
         </div>
 

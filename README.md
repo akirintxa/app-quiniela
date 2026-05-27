@@ -80,9 +80,9 @@ This project uses Supabase for its database. Follow these steps to set up your d
     *   Supabase's built-in SMTP on free tiers has very low rate limits (~2 emails/hour).
     *   Use a custom SMTP provider (e.g. [Resend](https://resend.com)): verify your domain, then in Supabase **Authentication → Emails → SMTP** set host `smtp.resend.com`, user `resend`, password = your Resend API key.
     *   Set **Site URL** to `NEXT_PUBLIC_SITE_URL` (e.g. `https://losqq.com`) and add **Redirect URLs**: `https://losqq.com/auth/callback` (and `https://losqq.com/**` if you use wildcards).
-    *   **Email templates (important):** Signup sends the OTP via **Magic Link** (`signInWithOtp`). In Supabase → **Authentication → Email Templates**, edit **Magic Link** (not only Confirm signup) and show: `Tu código: {{ .Token }}` (6 digits). Optional: add the same in **Reset password** for recovery codes.
+    *   **Email templates (important):** After signup, two emails may be sent. Edit both in **Authentication → Email Templates** and include `Tu código: {{ .Token }}` in **Confirm signup** and **Magic Link**. The Magic Link code is preferred at verification (`type: email`).
     *   Ensure **Confirm email** is enabled under Authentication → Providers → Email.
-    *   Users may receive two emails after signup; they must use the code from the **latest** email (Magic Link / acceso).
+    *   Configure SMTP (e.g. Resend) if no emails arrive at all.
     *   Test signup confirmation and password reset in staging before going live.
 
 ## Inviting players (QR / link)

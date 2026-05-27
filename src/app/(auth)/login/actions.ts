@@ -126,71 +126,56 @@ export async function signup(formData: FormData) {
   }
 
   await setPendingSignupEmail(email)
-  await setPendingSignupPassword(password)
+  await clearPendingSignupPassword()
 
-  // Un solo correo: plantilla "Magic Link" con {{ .Token }} (signInWithOtp)
-  const { error: otpError } = await supabase.auth.signInWithOtp({
+  // signUp dispara el correo "Confirm signup" (fiable con Confirm email ON)
+  const { data, error: signUpError } = await supabase.auth.signUp({
     email,
-    options: { shouldCreateUser: true },
+    password,
   })
 
-  if (!otpError) {
-    redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
+  if (signUpError) {
+    redirect(
+      loginQuery({
+        mode: 'signup',
+        message: translateError(signUpError.message),
+        email,
+      })
+    )
   }
 
-  const otpMsg = otpError.message.toLowerCase()
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    redirect(loginQuery({ mode: 'login', error: 'already_registered', email }))
+  }
 
-  // Cuenta ya creada en intentos anteriores: signUp + OTP de acceso
-  if (
-    otpMsg.includes('already') ||
-    otpMsg.includes('registered') ||
-    otpMsg.includes('exists')
-  ) {
-    await clearPendingSignupPassword()
+  if (data.session) {
+    await clearPendingSignupEmail()
+    await redirectAfterAuth(supabase)
+  }
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+  // Segundo correo: plantilla Magic Link (código que valida con type email)
+  const { error: magicOtpError } = await sendLoginOtpEmail(supabase, email)
 
-    if (signUpError) {
-      redirect(
-        loginQuery({
-          mode: 'signup',
-          message: translateError(signUpError.message),
-          email,
-        })
-      )
-    }
-
-    if (data.user && data.user.identities && data.user.identities.length === 0) {
-      redirect(loginQuery({ mode: 'login', error: 'already_registered', email }))
-    }
-
-    if (data.session) {
-      await clearPendingSignupEmail()
-      await redirectAfterAuth(supabase)
-    }
-
-    const { error: loginOtpError } = await sendLoginOtpEmail(supabase, email)
-    if (loginOtpError) {
-      redirect(
-        loginQuery({
-          mode: 'signup',
-          email,
-          message: translateError(loginOtpError.message),
-        })
-      )
-    }
-
-    redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
+  if (magicOtpError) {
+    console.error('sendLoginOtpEmail after signUp:', magicOtpError.message)
+    redirect(
+      loginQuery({
+        mode: 'login',
+        status: 'awaiting_otp',
+        email,
+        message:
+          'Revisa tu correo (confirmación de cuenta). Si no llega nada en 2 min, pulsa Reenviar código.',
+      })
+    )
   }
 
   redirect(
     loginQuery({
-      mode: 'signup',
+      mode: 'login',
+      status: 'awaiting_otp',
       email,
-      message: translateError(otpError.message),
+      message:
+        'Te hemos enviado un código por correo. Si llegan dos emails, usa el de «Magic Link» / acceso.',
     })
   )
 }
@@ -256,14 +241,19 @@ export async function resendSignupOtp(formData: FormData) {
 
   await setPendingSignupEmail(email)
 
-  const { error } = await sendLoginOtpEmail(supabase, email)
+  const { error: resendError } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  })
 
-  if (error) {
+  const { error: magicOtpError } = await sendLoginOtpEmail(supabase, email)
+
+  if (resendError && magicOtpError) {
     redirect(
       loginQuery({
         status: 'awaiting_otp',
         email,
-        message: translateError(error.message),
+        message: translateError(resendError.message),
       })
     )
   }
@@ -272,8 +262,7 @@ export async function resendSignupOtp(formData: FormData) {
     loginQuery({
       status: 'awaiting_otp',
       email,
-      message:
-        'Código nuevo enviado. Usa el correo más reciente (puede llamarse «Magic Link» o acceso).',
+      message: 'Código reenviado. Revisa el correo más reciente (Magic Link o confirmación).',
     })
   )
 }
