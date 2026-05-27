@@ -49,9 +49,20 @@ export default async function Navbar() {
               initialFlagUrl={initialFlagUrl}
             />
           ) : (
-            <Link href="/login" className="bg-zinc-900 dark:bg-white text-white dark:text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-black/10">
-              Entrar
-            </Link>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link
+                href="/login?mode=signup"
+                className="hidden sm:inline bg-blue-600 text-white px-4 sm:px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+              >
+                Crear cuenta
+              </Link>
+              <Link
+                href="/login"
+                className="bg-zinc-900 dark:bg-white text-white dark:text-black px-5 sm:px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-black/10"
+              >
+                Entrar
+              </Link>
+            </div>
           )}
         </div>
       </div>

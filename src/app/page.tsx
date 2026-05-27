@@ -6,6 +6,7 @@ import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import { Match, Prediction, Team } from "@/types";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import LandingPage from "@/components/LandingPage";
 import { normalizeInviteCode } from "@/lib/pool-invite";
 import { calculateStandings } from "@/lib/standings";
 import {
@@ -45,78 +46,8 @@ export default async function Home({
     redirect(`/join/${normalizeInviteCode(joinCode)}`);
   }
 
-  // --- LANDING PAGE FOR NON-LOGGED USERS ---
   if (!user) {
-    return (
-      <div className="min-h-[calc(100vh-80px)] flex flex-col font-sans overflow-hidden bg-white dark:bg-black">
-        {/* HERO SECTION */}
-        <section className="relative pt-20 pb-32 px-6 overflow-hidden">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-6xl pointer-events-none">
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full animate-pulse"></div>
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400/10 blur-[120px] rounded-full"></div>
-          </div>
-
-          <div className="max-w-5xl mx-auto text-center relative z-10">
-            <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-full mb-8 border border-blue-100 dark:border-blue-800/30 animate-in fade-in slide-in-from-top-4 duration-700">
-              <span className="w-2 h-2 bg-blue-600 rounded-full animate-ping"></span>
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Mundial 2026</span>
-            </div>
-            
-            <h1 className="text-5xl sm:text-8xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-[0.9] mb-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-              DOMINA <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400">LA QUINIELA</span>
-            </h1>
-            
-            <p className="max-w-xl mx-auto text-sm sm:text-lg font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-tight mb-12 leading-tight">
-              Crea ligas privadas, compite con tus amigos y demuestra quien más sabe de fútbol en el Mundial 2026.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in zoom-in duration-1000 delay-300">
-              <Link href="/login" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-2xl shadow-blue-500/40 transition-all hover:scale-105 active:scale-95">
-                Empezar a Jugar
-              </Link>
-              <Link href="/ranking?pool=all" className="w-full sm:w-auto bg-gray-100 dark:bg-zinc-900 text-gray-900 dark:text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs border border-gray-200 dark:border-zinc-800 transition-all hover:bg-gray-200 dark:hover:bg-zinc-800">
-                Ver Ranking Live
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* FEATURES GRID */}
-        <section className="py-24 px-6 bg-gray-50/50 dark:bg-zinc-950/50 border-y border-gray-100 dark:border-zinc-900">
-          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] shadow-xl border border-gray-100 dark:border-zinc-800 transform transition-all hover:-translate-y-2">
-              <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-blue-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </div>
-              <h3 className="text-xl font-black uppercase tracking-tighter mb-4">Ligas Privadas</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">Crea ligas exclusivas para tu oficina, familia o amigos con códigos de invitación únicos.</p>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] shadow-xl border border-gray-100 dark:border-zinc-800 transform transition-all hover:-translate-y-2">
-              <div className="w-14 h-14 bg-green-500 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-green-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-              </div>
-              <h3 className="text-xl font-black uppercase tracking-tighter mb-4">Estadísticas Pro</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">Analiza tu efectividad, plenos y tendencias con nuestro nuevo panel de rendimiento avanzado.</p>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] shadow-xl border border-gray-100 dark:border-zinc-800 transform transition-all hover:-translate-y-2">
-              <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-orange-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m12 14 4-4 4 4-4 4-4-4Z"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
-              </div>
-              <h3 className="text-xl font-black uppercase tracking-tighter mb-4">Ayuda Inteligente</h3>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-tight leading-relaxed">¿Sin tiempo? Usa &quot;Una ayudaíta&quot; para generar predicciones basadas en datos en un solo click.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* FOOTER MINI */}
-        <footer className="py-12 text-center border-t border-gray-100 dark:border-zinc-900 bg-white dark:bg-black">
-          <p className="text-[10px] font-black text-gray-300 dark:text-zinc-700 uppercase tracking-[0.5em]">Q26 — Quiniela 2026</p>
-        </footer>
-      </div>
-    );
+    return <LandingPage />;
   }
 
   // --- ORIGINAL DASHBOARD LOGIC (For Logged Users) ---
