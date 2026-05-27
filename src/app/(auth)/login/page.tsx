@@ -3,8 +3,10 @@
 import { useState, useTransition, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { login, signup } from './actions';
+import { login, signup, verifySignupOtp, resendSignupOtp } from './actions';
 import PasswordInput from '@/components/PasswordInput';
+import OtpCodeInput from '@/components/OtpCodeInput';
+import { maskEmail } from '@/lib/mask-email';
 
 type AuthMode = 'login' | 'signup';
 
@@ -27,9 +29,13 @@ function LoginContent() {
   const legacyMessage = searchParams.get('message');
   const prefilledEmail = searchParams.get('email') ?? '';
 
+  const awaitingOtp = status === 'awaiting_otp' && !!prefilledEmail;
+
   useEffect(() => {
-    setMode(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
-  }, [searchParams]);
+    if (!awaitingOtp) {
+      setMode(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
+    }
+  }, [searchParams, awaitingOtp]);
 
   const isLegacySuccess =
     !!legacyMessage &&
@@ -39,17 +45,22 @@ function LoginContent() {
 
   const errorText =
     (errorCode && ERROR_COPY[errorCode]) ||
-    (legacyMessage && !isLegacySuccess && !status ? legacyMessage : null);
+    (legacyMessage && !isLegacySuccess && status !== 'awaiting_otp'
+      ? legacyMessage
+      : null);
+
+  const otpMessage =
+    awaitingOtp && legacyMessage ? legacyMessage : null;
 
   const successText =
     status === 'confirm_email'
       ? 'Registro casi listo. Revisa tu email para activar tu cuenta.'
-      : isLegacySuccess
+      : isLegacySuccess && !awaitingOtp
         ? legacyMessage
         : null;
 
   const showSignupAfterFailedLogin =
-    mode === 'login' && errorCode === 'invalid_credentials';
+    mode === 'login' && errorCode === 'invalid_credentials' && !awaitingOtp;
 
   const handleFormAction = (action: (formData: FormData) => Promise<void>) => {
     return (formData: FormData) => {
@@ -62,6 +73,79 @@ function LoginContent() {
   const setAuthMode = (next: AuthMode) => {
     setMode(next);
   };
+
+  if (awaitingOtp) {
+    return (
+      <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
+        <div className="text-center mb-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 mb-3">
+            Confirma tu cuenta
+          </p>
+          <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-relaxed">
+            Te enviamos un código de <strong>6 dígitos</strong> a{' '}
+            <span className="font-mono text-gray-900 dark:text-white">
+              {maskEmail(prefilledEmail)}
+            </span>
+          </p>
+          <p className="mt-3 text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
+            Puedes abrir el correo en otro móvil y pegar el código aquí
+          </p>
+        </div>
+
+        <form className="space-y-6">
+          <input type="hidden" name="email" value={prefilledEmail} />
+
+          {otpMessage && (
+            <div
+              className={`p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border ${
+                otpMessage.toLowerCase().includes('nuevo')
+                  ? 'bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/30 text-green-600'
+                  : 'bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600'
+              }`}
+            >
+              {otpMessage}
+            </div>
+          )}
+
+          <div>
+            <label
+              className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1 text-center"
+              htmlFor="token"
+            >
+              Código de verificación
+            </label>
+            <OtpCodeInput autoFocus />
+          </div>
+
+          <button
+            formAction={handleFormAction(verifySignupOtp)}
+            disabled={isPending}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+          >
+            {isPending ? 'Verificando...' : 'Confirmar y entrar'}
+          </button>
+
+          <button
+            type="submit"
+            formAction={handleFormAction(resendSignupOtp)}
+            disabled={isPending}
+            className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+          >
+            Reenviar código
+          </button>
+        </form>
+
+        <p className="mt-6 text-center">
+          <Link
+            href="/login"
+            className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600"
+          >
+            Volver al inicio de sesión
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">

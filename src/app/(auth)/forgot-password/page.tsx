@@ -1,66 +1,105 @@
 'use client';
 
-import { Suspense } from 'react';
+import { useTransition, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { forgotPassword } from '../login/actions';
+import {
+  forgotPassword,
+  verifyRecoveryOtp,
+  resendRecoveryOtp,
+} from '../login/actions';
 import { maskEmail } from '@/lib/mask-email';
-
-const NEUTRAL_SENT_MESSAGE =
-  'Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.';
+import OtpCodeInput from '@/components/OtpCodeInput';
 
 function ForgotPasswordContent() {
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+
   const status = searchParams.get('status');
   const emailParam = searchParams.get('email') ?? '';
   const errorMessage = searchParams.get('error');
-  const isSent = status === 'sent';
+  const infoMessage = searchParams.get('message');
+  const isSent = status === 'sent' && !!emailParam;
+
+  const handleFormAction = (action: (formData: FormData) => Promise<void>) => {
+    return (formData: FormData) => {
+      startTransition(async () => {
+        await action(formData);
+      });
+    };
+  };
 
   if (isSent) {
-    const masked = emailParam ? maskEmail(emailParam) : null;
+    const masked = maskEmail(emailParam);
     return (
-      <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800 text-center">
-        <div className="w-14 h-14 mx-auto mb-6 rounded-2xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect width="20" height="16" x="2" y="4" rx="2" />
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-          </svg>
-        </div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-4">
-          Revisa tu correo
-        </p>
-        <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-relaxed mb-2">
-          {NEUTRAL_SENT_MESSAGE}
-        </p>
-        {masked && (
-          <p className="text-[10px] font-mono text-gray-400 dark:text-zinc-500 mb-8">
-            {masked}
+      <div className="bg-white dark:bg-zinc-900 py-10 px-8 shadow-2xl shadow-gray-200/50 dark:shadow-none rounded-[3rem] border border-gray-100 dark:border-zinc-800">
+        <div className="text-center mb-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 mb-3">
+            Código enviado
           </p>
-        )}
-        <div className="flex flex-col gap-3">
+          <p className="text-sm font-medium text-gray-600 dark:text-zinc-400 leading-relaxed">
+            Si existe una cuenta con{' '}
+            <span className="font-mono text-gray-900 dark:text-white">
+              {masked}
+            </span>
+            , recibirás un código de <strong>6 dígitos</strong>.
+          </p>
+          <p className="mt-3 text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-widest">
+            Pégalo aquí — puedes leer el correo en otro dispositivo
+          </p>
+        </div>
+
+        <form className="space-y-6">
+          <input type="hidden" name="email" value={emailParam} />
+
+          {errorMessage && (
+            <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400">
+              {errorMessage}
+            </div>
+          )}
+
+          {infoMessage && (
+            <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-green-50 dark:bg-green-950/20 border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400">
+              {infoMessage}
+            </div>
+          )}
+
+          <div>
+            <label
+              className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 text-center"
+              htmlFor="token"
+            >
+              Código de recuperación
+            </label>
+            <OtpCodeInput autoFocus />
+          </div>
+
+          <button
+            formAction={handleFormAction(verifyRecoveryOtp)}
+            disabled={isPending}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+          >
+            {isPending ? 'Verificando...' : 'Continuar'}
+          </button>
+
+          <button
+            type="submit"
+            formAction={handleFormAction(resendRecoveryOtp)}
+            disabled={isPending}
+            className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+          >
+            Reenviar código
+          </button>
+        </form>
+
+        <p className="mt-6 text-center">
           <Link
             href="/login"
-            className="w-full inline-block bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+            className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600"
           >
             Volver al login
           </Link>
-          <Link
-            href="/forgot-password"
-            className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-blue-600 transition-colors"
-          >
-            ¿No llegó? Reenviar enlace
-          </Link>
-        </div>
+        </p>
       </div>
     );
   }
@@ -94,10 +133,11 @@ function ForgotPasswordContent() {
 
         <div className="pt-2">
           <button
-            formAction={forgotPassword}
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+            formAction={handleFormAction(forgotPassword)}
+            disabled={isPending}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
           >
-            Enviar enlace
+            {isPending ? 'Enviando...' : 'Enviar código'}
           </button>
         </div>
       </form>
@@ -139,7 +179,7 @@ export default function ForgotPasswordPage() {
           RECUPERAR <span className="text-blue-600">ACCESO</span>
         </h2>
         <p className="mt-2 text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-[0.3em]">
-          Te enviaremos un enlace de entrada
+          Te enviaremos un código de 6 dígitos
         </p>
       </div>
 

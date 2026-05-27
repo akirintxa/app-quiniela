@@ -38,6 +38,10 @@ function translateError(message: string) {
   if (msg.includes('invalid email')) return 'El formato del correo no es válido.';
   if (msg.includes('confirmation_url_expired')) return 'El enlace de confirmación ha caducado.';
   if (msg.includes('user not found')) return 'Usuario no encontrado.';
+  if (msg.includes('otp_expired')) return 'El código ha caducado. Solicita uno nuevo.';
+  if (msg.includes('otp_disabled')) return 'El código no es válido. Comprueba los dígitos.';
+  if (msg.includes('token has expired') || msg.includes('invalid token'))
+    return 'Código incorrecto o caducado.';
   return 'Ha ocurrido un error. Inténtalo de nuevo.';
 }
 
@@ -73,6 +77,15 @@ export async function login(formData: FormData) {
     if (msg.includes('invalid login credentials')) {
       redirect(
         loginQuery({ mode: 'login', error: 'invalid_credentials', email })
+      )
+    }
+    if (msg.includes('email not confirmed')) {
+      redirect(
+        loginQuery({
+          status: 'awaiting_otp',
+          email,
+          message: 'Confirma tu cuenta con el código que te enviamos por correo.',
+        })
       )
     }
     redirect(
@@ -119,7 +132,86 @@ export async function signup(formData: FormData) {
     )
   }
 
-  redirect(loginQuery({ mode: 'login', status: 'confirm_email', email }))
+  if (data.session) {
+    await redirectAfterAuth(supabase)
+  }
+
+  redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
+}
+
+export async function verifySignupOtp(formData: FormData) {
+  const supabase = await createClient()
+  const email = (formData.get('email') as string)?.trim() ?? ''
+  const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
+
+  if (!email || token.length < 6) {
+    redirect(
+      loginQuery({
+        status: 'awaiting_otp',
+        email,
+        message: 'Introduce el código de 6 dígitos del correo.',
+      })
+    )
+  }
+
+  let { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'signup',
+  })
+
+  if (error) {
+    const fallback = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    })
+    error = fallback.error
+  }
+
+  if (error) {
+    redirect(
+      loginQuery({
+        status: 'awaiting_otp',
+        email,
+        message: translateError(error.message),
+      })
+    )
+  }
+
+  await redirectAfterAuth(supabase)
+}
+
+export async function resendSignupOtp(formData: FormData) {
+  const supabase = await createClient()
+  const email = (formData.get('email') as string)?.trim() ?? ''
+
+  if (!email) {
+    redirect(loginQuery({ mode: 'signup', message: 'Indica tu correo electrónico.' }))
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  })
+
+  if (error) {
+    redirect(
+      loginQuery({
+        status: 'awaiting_otp',
+        email,
+        message: translateError(error.message),
+      })
+    )
+  }
+
+  redirect(
+    loginQuery({
+      status: 'awaiting_otp',
+      email,
+      message: 'Te hemos enviado un código nuevo. Revisa tu correo.',
+    })
+  )
 }
 
 export async function forgotPassword(formData: FormData) {
@@ -139,6 +231,56 @@ export async function forgotPassword(formData: FormData) {
 
   redirect(
     `/forgot-password?status=sent&email=${encodeURIComponent(email)}`
+  )
+}
+
+export async function verifyRecoveryOtp(formData: FormData) {
+  const supabase = await createClient()
+  const email = (formData.get('email') as string)?.trim() ?? ''
+  const token = ((formData.get('token') as string) ?? '').replace(/\D/g, '')
+
+  if (!email || token.length < 6) {
+    redirect(
+      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent('Introduce el código de 6 dígitos.')}`
+    )
+  }
+
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'recovery',
+  })
+
+  if (error) {
+    redirect(
+      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(error.message))}`
+    )
+  }
+
+  redirect('/update-password')
+}
+
+export async function resendRecoveryOtp(formData: FormData) {
+  const supabase = await createClient()
+  const email = (formData.get('email') as string)?.trim() ?? ''
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+
+  if (!email) {
+    redirect('/forgot-password?error=' + encodeURIComponent('Indica tu correo.'))
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/update-password`,
+  })
+
+  if (error) {
+    redirect(
+      `/forgot-password?status=sent&email=${encodeURIComponent(email)}&error=${encodeURIComponent(translateError(error.message))}`
+    )
+  }
+
+  redirect(
+    `/forgot-password?status=sent&email=${encodeURIComponent(email)}&message=${encodeURIComponent('Código nuevo enviado. Revisa tu correo.')}`
   )
 }
 
