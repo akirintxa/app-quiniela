@@ -11,11 +11,14 @@ import {
 import {
   clearPendingRecoveryEmail,
   clearPendingSignupEmail,
+  clearPendingSignupPassword,
   getPendingRecoveryEmail,
   getPendingSignupEmail,
+  getPendingSignupPassword,
   normalizeAuthEmail,
   setPendingRecoveryEmail,
   setPendingSignupEmail,
+  setPendingSignupPassword,
 } from '@/lib/auth-pending-email'
 import { verifyEmailOtp } from '@/lib/verify-email-otp'
 import { sendLoginOtpEmail } from '@/lib/send-auth-otp'
@@ -91,12 +94,13 @@ export async function login(formData: FormData) {
       )
     }
     if (msg.includes('email not confirmed')) {
-      await setPendingSignupEmail(email)
+      await setPendingSignupEmail(normalizeAuthEmail(email))
+      await sendLoginOtpEmail(supabase, normalizeAuthEmail(email))
       redirect(
         loginQuery({
           status: 'awaiting_otp',
-          email,
-          message: 'Confirma tu cuenta con el código que te enviamos por correo.',
+          email: normalizeAuthEmail(email),
+          message: 'Confirma tu cuenta con el código del correo de acceso (Magic Link).',
         })
       )
     }
@@ -115,65 +119,80 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const supabase = await createClient()
   const email = normalizeAuthEmail((formData.get('email') as string) ?? '')
-
   const password = formData.get('password') as string
 
-  const { data, error } = await supabase.auth.signUp({
+  if (!email || !password) {
+    redirect(loginQuery({ mode: 'signup', message: 'Email y contraseña son obligatorios.' }))
+  }
+
+  await setPendingSignupEmail(email)
+  await setPendingSignupPassword(password)
+
+  // Un solo correo: plantilla "Magic Link" con {{ .Token }} (signInWithOtp)
+  const { error: otpError } = await supabase.auth.signInWithOtp({
     email,
-    password,
+    options: { shouldCreateUser: true },
   })
 
-  if (error) {
-    redirect(
-      loginQuery({
-        mode: 'signup',
-        message: translateError(error.message),
-        email,
-      })
-    )
+  if (!otpError) {
+    redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
   }
 
-  if (data.user && data.user.identities && data.user.identities.length === 0) {
-    redirect(
-      loginQuery({ mode: 'login', error: 'already_registered', email })
-    )
-  }
+  const otpMsg = otpError.message.toLowerCase()
 
-  if (data.session) {
-    await clearPendingSignupEmail()
-    await redirectAfterAuth(supabase)
-  }
+  // Cuenta ya creada en intentos anteriores: signUp + OTP de acceso
+  if (
+    otpMsg.includes('already') ||
+    otpMsg.includes('registered') ||
+    otpMsg.includes('exists')
+  ) {
+    await clearPendingSignupPassword()
 
-  const { error: otpSendError } = await sendLoginOtpEmail(supabase, email)
-
-  if (otpSendError) {
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
+      password,
     })
-    if (resendError) {
+
+    if (signUpError) {
+      redirect(
+        loginQuery({
+          mode: 'signup',
+          message: translateError(signUpError.message),
+          email,
+        })
+      )
+    }
+
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      redirect(loginQuery({ mode: 'login', error: 'already_registered', email }))
+    }
+
+    if (data.session) {
+      await clearPendingSignupEmail()
+      await redirectAfterAuth(supabase)
+    }
+
+    const { error: loginOtpError } = await sendLoginOtpEmail(supabase, email)
+    if (loginOtpError) {
       redirect(
         loginQuery({
           mode: 'signup',
           email,
-          message: translateError(otpSendError.message),
+          message: translateError(loginOtpError.message),
         })
       )
     }
-    await setPendingSignupEmail(email)
-    redirect(
-      loginQuery({
-        mode: 'login',
-        status: 'awaiting_otp',
-        email,
-        message:
-          'Revisa el correo de confirmación de cuenta. Si no funciona el código, pide reenviar.',
-      })
-    )
+
+    redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
   }
 
-  await setPendingSignupEmail(email)
-  redirect(loginQuery({ mode: 'login', status: 'awaiting_otp', email }))
+  redirect(
+    loginQuery({
+      mode: 'signup',
+      email,
+      message: translateError(otpError.message),
+    })
+  )
 }
 
 export async function verifySignupOtp(formData: FormData) {
@@ -193,7 +212,7 @@ export async function verifySignupOtp(formData: FormData) {
     )
   }
 
-  const result = await verifyEmailOtp(supabase, email, token)
+  const result = await verifyEmailOtp(supabase, email, token, ['email', 'signup'])
 
   if (!result.ok) {
     redirect(
@@ -203,6 +222,23 @@ export async function verifySignupOtp(formData: FormData) {
         message: translateError(result.message),
       })
     )
+  }
+
+  const pendingPassword = await getPendingSignupPassword()
+  if (pendingPassword) {
+    const { error: pwError } = await supabase.auth.updateUser({
+      password: pendingPassword,
+    })
+    await clearPendingSignupPassword()
+    if (pwError) {
+      redirect(
+        loginQuery({
+          status: 'awaiting_otp',
+          email,
+          message: translateError(pwError.message),
+        })
+      )
+    }
   }
 
   await clearPendingSignupEmail()
