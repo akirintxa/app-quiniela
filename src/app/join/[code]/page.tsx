@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import {
   findPoolByInviteCode,
@@ -51,8 +50,6 @@ export default async function JoinPoolPage({
 
   if (user) {
     const result = await joinPoolByInviteCode(supabase, user.id, code);
-    revalidatePath("/groups");
-    revalidatePath(`/groups/${pool.id}`);
     redirect(joinResultRedirectPath(result));
   }
 

@@ -13,6 +13,9 @@ ON public.pools FOR SELECT
 TO authenticated
 USING (true);
 
+-- Invitaciones /join/{código} sin sesión: ejecutar pool_invite_public.sql (RPC)
+-- o configurar SUPABASE_SERVICE_ROLE_KEY en el servidor (Vercel).
+
 DROP POLICY IF EXISTS "Usuarios pueden crear sus propias ligas" ON public.pools;
 CREATE POLICY "Usuarios pueden crear sus propias ligas"
 ON public.pools FOR INSERT

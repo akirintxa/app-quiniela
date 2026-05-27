@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { getJoinUrl, normalizeInviteCode } from "@/lib/join-url";
+import { tryCreateServiceRoleClient } from "@/utils/supabase/admin";
 
 export { getJoinUrl, normalizeInviteCode };
 
@@ -49,6 +50,24 @@ export async function clearPendingPoolInviteCookie() {
   jar.delete(PENDING_POOL_INVITE_COOKIE);
 }
 
+async function queryPoolByInviteCode(
+  client: SupabaseClient,
+  code: string
+): Promise<PoolInvitePreview | null> {
+  const { data, error } = await client
+    .from("pools")
+    .select("id, name, invite_code")
+    .eq("invite_code", code)
+    .maybeSingle();
+
+  if (error) {
+    console.error("findPoolByInviteCode:", error.message);
+    return null;
+  }
+  return data as PoolInvitePreview | null;
+}
+
+/** Vista previa de liga por código (join/QR). Anon no puede leer `pools` por RLS. */
 export async function findPoolByInviteCode(
   supabase: SupabaseClient,
   rawCode: string
@@ -56,14 +75,27 @@ export async function findPoolByInviteCode(
   const code = normalizeInviteCode(rawCode);
   if (!code) return null;
 
-  const { data, error } = await supabase
-    .from("pools")
-    .select("id, name, invite_code")
-    .eq("invite_code", code)
-    .maybeSingle();
+  const found = await queryPoolByInviteCode(supabase, code);
+  if (found) return found;
 
-  if (error || !data) return null;
-  return data as PoolInvitePreview;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) return null;
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "get_pool_invite_preview",
+    { p_invite_code: code }
+  );
+  if (!rpcError && rpcData) {
+    const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (row) return row as PoolInvitePreview;
+  }
+
+  const admin = tryCreateServiceRoleClient();
+  if (admin) return queryPoolByInviteCode(admin, code);
+
+  return null;
 }
 
 export async function joinPoolByInviteCode(
