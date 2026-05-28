@@ -49,6 +49,9 @@ export default function UpdatePasswordPage({
                 name="password"
                 placeholder="••••••••"
               />
+              <p className="mt-2 ml-1 text-[10px] font-medium text-gray-400 dark:text-zinc-500">
+                Mínimo 8 caracteres y distinta a tu contraseña actual.
+              </p>
             </div>
 
             <div className="pt-2">

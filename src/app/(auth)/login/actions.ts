@@ -10,6 +10,8 @@ import {
 } from '@/lib/pool-invite'
 import { normalizeAuthEmail } from '@/lib/normalize-auth-email'
 
+const MIN_PASSWORD_LENGTH = 8
+
 function authCallbackUrl(origin: string, withJoinComplete: boolean) {
   if (withJoinComplete) {
     return `${origin}/auth/callback?next=${encodeURIComponent('/join/complete')}`
@@ -38,15 +40,41 @@ async function redirectAfterAuth(supabase: Awaited<ReturnType<typeof createClien
 }
 
 function translateError(message: string) {
-  const msg = message.toLowerCase();
-  if (msg.includes('invalid login credentials')) return 'Email o contraseña incorrectos.';
-  if (msg.includes('user already registered')) return 'Este correo ya está registrado.';
-  if (msg.includes('email rate limit exceeded')) return 'Demasiados intentos. Espera un minuto.';
-  if (msg.includes('password is too short')) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (msg.includes('invalid email')) return 'El formato del correo no es válido.';
-  if (msg.includes('confirmation_url_expired')) return 'El enlace ha caducado. Pide otro correo de confirmación.';
-  if (msg.includes('user not found')) return 'Usuario no encontrado.';
-  return 'Ha ocurrido un error. Inténtalo de nuevo.';
+  const msg = message.toLowerCase()
+  if (msg.includes('invalid login credentials'))
+    return 'Email o contraseña incorrectos.'
+  if (msg.includes('user already registered'))
+    return 'Este correo ya está registrado.'
+  if (msg.includes('email rate limit exceeded'))
+    return 'Demasiados intentos. Espera un minuto.'
+  if (msg.includes('password is too short'))
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`
+  if (
+    msg.includes('same password') ||
+    msg.includes('should be different') ||
+    msg.includes('new password should be different')
+  )
+    return 'La nueva contraseña no puede ser igual a la anterior.'
+  if (
+    msg.includes('pwned') ||
+    msg.includes('compromised') ||
+    msg.includes('leaked') ||
+    msg.includes('weak password')
+  )
+    return 'Esa contraseña es débil o comprometida. Elige una distinta y más segura.'
+  if (msg.includes('invalid email')) return 'El formato del correo no es válido.'
+  if (msg.includes('confirmation_url_expired'))
+    return 'El enlace ha caducado. Pide otro correo de confirmación.'
+  if (msg.includes('user not found')) return 'Usuario no encontrado.'
+  return 'Ha ocurrido un error. Inténtalo de nuevo.'
+}
+
+function passwordValidationMessage(password: string): string | null {
+  if (!password?.trim()) return 'La contraseña es obligatoria.'
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`
+  }
+  return null
 }
 
 function loginQuery(params: {
@@ -115,6 +143,10 @@ export async function signup(formData: FormData) {
 
   if (!email || !password) {
     redirect(loginQuery({ mode: 'signup', message: 'Email y contraseña son obligatorios.' }))
+  }
+  const passwordMessage = passwordValidationMessage(password)
+  if (passwordMessage) {
+    redirect(loginQuery({ mode: 'signup', message: passwordMessage, email }))
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -208,6 +240,12 @@ export async function forgotPassword(formData: FormData) {
 export async function updatePassword(formData: FormData) {
   const supabase = await createClient()
   const password = formData.get('password') as string
+  const passwordMessage = passwordValidationMessage(password)
+  if (passwordMessage) {
+    return redirect(
+      `/update-password?message=${encodeURIComponent(passwordMessage)}`
+    )
+  }
 
   const { error } = await supabase.auth.updateUser({
     password: password,

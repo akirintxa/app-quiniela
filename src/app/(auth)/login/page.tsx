@@ -23,6 +23,7 @@ function LoginContent() {
   const initialMode: AuthMode =
     searchParams.get('mode') === 'signup' ? 'signup' : 'login';
   const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [hideError, setHideError] = useState(false);
 
   const errorCode = searchParams.get('error');
   const status = searchParams.get('status');
@@ -38,6 +39,10 @@ function LoginContent() {
     }
   }, [searchParams, checkEmail]);
 
+  useEffect(() => {
+    setHideError(false);
+  }, [errorCode, legacyMessage, status]);
+
   const errorText =
     (errorCode && ERROR_COPY[errorCode]) ||
     (legacyMessage &&
@@ -48,6 +53,7 @@ function LoginContent() {
     status !== 'check_email'
       ? legacyMessage
       : null);
+  const visibleErrorText = hideError ? null : errorText;
 
   const infoMessage =
     checkEmail && legacyMessage ? legacyMessage : null;
@@ -124,7 +130,10 @@ function LoginContent() {
       <div className="flex rounded-2xl bg-gray-50 dark:bg-zinc-800 p-1 mb-6">
         <button
           type="button"
-          onClick={() => setMode('login')}
+          onClick={() => {
+            setMode('login');
+            setHideError(true);
+          }}
           className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
             mode === 'login'
               ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-sm'
@@ -135,7 +144,10 @@ function LoginContent() {
         </button>
         <button
           type="button"
-          onClick={() => setMode('signup')}
+          onClick={() => {
+            setMode('signup');
+            setHideError(true);
+          }}
           className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
             mode === 'signup'
               ? 'bg-white dark:bg-zinc-900 text-blue-600 shadow-sm'
@@ -147,9 +159,9 @@ function LoginContent() {
       </div>
 
       <form className="space-y-6">
-        {errorText && (
+        {visibleErrorText && (
           <div className="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border bg-red-50 dark:bg-red-950/20 border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400">
-            {errorText}
+            {visibleErrorText}
           </div>
         )}
 
@@ -168,6 +180,7 @@ function LoginContent() {
             type="email"
             placeholder="tu@email.com"
             defaultValue={prefilledEmail}
+            onChange={() => setHideError(true)}
             required
           />
         </div>
@@ -189,7 +202,16 @@ function LoginContent() {
               </Link>
             )}
           </div>
-          <PasswordInput id="password" name="password" />
+          <PasswordInput
+            id="password"
+            name="password"
+            onChange={() => setHideError(true)}
+          />
+          {mode === 'signup' && (
+            <p className="mt-2 ml-1 text-[10px] font-medium text-gray-400 dark:text-zinc-500">
+              Usa mínimo 8 caracteres. Evita claves comunes o ya filtradas.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 pt-2">
@@ -218,7 +240,10 @@ function LoginContent() {
               </p>
               <button
                 type="button"
-                onClick={() => setMode('signup')}
+                onClick={() => {
+                  setMode('signup');
+                  setHideError(true);
+                }}
                 className="w-full py-3 rounded-2xl border border-gray-200 dark:border-zinc-700 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-zinc-300 hover:border-blue-500 hover:text-blue-600 transition-all"
               >
                 Crear cuenta con este email
