@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { getJoinUrl } from "@/lib/join-url";
 
-export default function ShareLeagueQR({ inviteCode }: { inviteCode: string }) {
+export default function ShareLeagueQR({
+  inviteCode,
+  poolName,
+}: {
+  inviteCode: string;
+  poolName: string;
+}) {
   const [open, setOpen] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -111,6 +117,9 @@ export default function ShareLeagueQR({ inviteCode }: { inviteCode: string }) {
             >
               Compartir liga
             </h2>
+            <p className="text-xl font-black uppercase tracking-tight text-gray-900 dark:text-white mb-3 pr-6 leading-tight">
+              {poolName}
+            </p>
             <p className="text-sm font-medium text-gray-500 dark:text-zinc-400 mb-6 pr-6">
               Escanea el QR o copia el enlace para invitar jugadores.
             </p>

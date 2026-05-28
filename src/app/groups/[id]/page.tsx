@@ -401,7 +401,10 @@ export default async function GroupDetailPage({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CopyInviteCode code={pool.invite_code} />
-            <ShareLeagueQR inviteCode={pool.invite_code} />
+            <ShareLeagueQR
+              inviteCode={pool.invite_code}
+              poolName={pool.name}
+            />
           </div>
         </nav>
 
