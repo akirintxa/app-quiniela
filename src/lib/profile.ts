@@ -13,6 +13,18 @@ export type ProfileFields = {
   favoriteTeam: FavoriteTeam | null;
 };
 
+export type ProfileMissingField = "nickname" | "favorite_team";
+
+/** Qué falta en `profiles` para aparecer bien en ligas y ranking. */
+export function getProfileMissing(
+  fields: ProfileFields | null
+): ProfileMissingField[] {
+  const missing: ProfileMissingField[] = [];
+  if (!fields?.nickname?.trim()) missing.push("nickname");
+  if (!fields?.favorite_team_id) missing.push("favorite_team");
+  return missing;
+}
+
 /** Carga perfil sin join embebido (no requiere FK en schema cache de Supabase). */
 export async function fetchProfileFields(
   supabase: SupabaseClient,

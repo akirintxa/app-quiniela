@@ -182,8 +182,11 @@ export default async function RankingPage({
     });
 
     leagueRanking = Object.values(leagueMap)
-      .filter(l => l.members >= 1)
-      .map(l => ({ ...l, average: Math.round((l.totalPoints / l.members) * 10) / 10 }))
+      .filter((l) => l.members >= 2)
+      .map((l) => ({
+        ...l,
+        average: Math.round((l.totalPoints / l.members) * 10) / 10,
+      }))
       .sort((a, b) => b.average - a.average);
   }
 
