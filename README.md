@@ -1,95 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Q26 - La Quiniela
 
-## Getting Started
+Aplicacion web para pronosticos del Mundial 2026 con ligas privadas, ranking de jugadores y panel de administracion.
 
-First, run the development server:
+Stack principal:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js (App Router)
+- Supabase (Auth + Postgres)
+- Tailwind CSS
+- Vercel (deploy)
+
+## Estado actual del proyecto
+
+- Registro/login por email + password con confirmacion por enlace (`ConfirmationURL`).
+- Recuperacion de password por enlace (sin pegar OTP manual).
+- Ligas privadas con invitacion por codigo y QR.
+- Flujo `/join/{code}` con auto-union tras autenticacion.
+- Ranking de jugadores y ranking de ligas.
+- Panel `/admin` protegido por variable de entorno (`ADMIN_EMAIL`).
+
+## Pendiente importante
+
+La **integracion automatica de resultados** (feed externo + actualizacion en vivo) **aun no esta implementada**.
+
+- Hoy, la carga y cierre de resultados se hace manualmente en `/admin`.
+- Existe el modulo base para esta integracion en `src/lib/fifa-sync.ts`, pero actualmente lanza error de "no implementado".
+- Objetivo futuro: cron/webhook que consuma fuente oficial y dispare las mismas acciones de admin (`startMatch`, `updateLiveScore`, `finalizeMatch`).
+
+## Variables de entorno
+
+Crea `.env.local` usando `.env.local.example` como referencia:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+ADMIN_EMAIL=tu@email.com,otro@email.com
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Notas:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `ADMIN_EMAIL` controla quien puede acceder a `/admin`.
+- `SUPABASE_SERVICE_ROLE_KEY` es solo servidor (nunca exponer en cliente).
+- En produccion, `NEXT_PUBLIC_SITE_URL` debe ser el dominio real (por ejemplo `https://losqq.com`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Arranque local
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Abrir `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Base de datos (Supabase)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Crear proyecto en Supabase.
+2. Ejecutar `schema.sql` en SQL Editor.
+3. (Opcional) Ejecutar `seed.sql` para datos de prueba.
+4. Aplicar politicas RLS necesarias (`pools_rls.sql` y otros scripts de soporte segun entorno).
 
-## Deploy on Vercel
+## Auth y correos
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Recomendado para produccion:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Configurar SMTP propio (por ejemplo [Resend](https://resend.com)).
+- En Supabase Auth:
+  - **Site URL**: dominio publico de la app.
+  - **Redirect URL**: incluir `https://tu-dominio/auth/callback`.
+- Plantillas:
+  - **Confirm signup** con `{{ .ConfirmationURL }}`
+  - **Reset password** con `{{ .ConfirmationURL }}`
 
-## Web Push Notifications (Optional)
+## Invitaciones por QR / enlace
 
-To implement web push notifications for "Match about to start" alerts, you could use the following approach:
+Cada liga tiene `invite_code`:
 
-1.  **Service Worker:** Create a service worker to handle push events in the background.
-2.  **Push Subscription:** Use the `PushManager` API in the browser to subscribe the user to push notifications.
-3.  **Store Subscription:** Save the user's push subscription object to your database (e.g., in a `push_subscriptions` table).
-4.  **Backend Logic:** Create a backend process (e.g., a Supabase Edge Function or a cron job) that:
-    *   Checks for upcoming matches.
-    *   Finds users who have subscribed to notifications.
-    *   Sends a push notification to the subscribed users using a library like `web-push`.
+- Link directo: `{NEXT_PUBLIC_SITE_URL}/join/{invite_code}`
+- Alias corto: `/?join=CODE` (redirige a `/join/CODE`)
 
-This would allow you to send timely alerts to your users, even when they don't have the app open.
+Flujo:
 
-## Database Setup with Supabase
+1. Usuario escanea QR.
+2. Si no esta logueado, se guarda invitacion pendiente.
+3. Tras registro + confirmacion email, entra automaticamente a la liga.
+4. Si ya esta logueado, se une al momento.
 
-This project uses Supabase for its database. Follow these steps to set up your database:
+## Deploy
 
-1.  **Create a Supabase Project:**
-    *   Go to [Supabase](https://supabase.com/) and create a new project.
-    *   Note down your Project URL and Anon Key, which you'll use for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your `.env.local` file.
+Push a `main` despliega en Vercel.
 
-2.  **Run `schema.sql`:**
-    *   In your Supabase project dashboard, navigate to the "SQL Editor".
-    *   Open the `web-apps/app-quiniela/schema.sql` file from this project.
-    *   Copy the content of `schema.sql` and paste it into the Supabase SQL Editor.
-    *   Run the query to create the necessary tables (`teams`, `matches`, `predictions`, `pools`, `pool_members`).
+Antes de publicar:
 
-3.  **Run `seed.sql` (Optional for Sample Data):**
-    *   After running `schema.sql`, you can optionally populate your database with some sample teams and a fictional match schedule.
-    *   Open the `web-apps/app-quiniela/seed.sql` file.
-    *   Copy its content and paste it into the Supabase SQL Editor.
-    *   Run the query to insert the sample data. This is useful for development and testing.
-
-4.  **Enable Row Level Security (RLS):**
-    *   For each table, go to "Authentication" -> "Policies" and enable RLS. You'll need to define policies later based on your application's access control requirements.
-
-5.  **Set up Authentication:**
-    *   Configure your desired authentication methods (e.g., Email/Password, Google, etc.) in Supabase under "Authentication" -> "Providers".
-    *   Ensure your Next.js app's authentication flow (in the `(auth)` route group) integrates with Supabase authentication.
-
-6.  **Transactional email (recommended for production):**
-    *   Supabase's built-in SMTP on free tiers has very low rate limits (~2 emails/hour).
-    *   Use a custom SMTP provider (e.g. [Resend](https://resend.com)): verify your domain, then in Supabase **Authentication → Emails → SMTP** set host `smtp.resend.com`, user `resend`, password = your Resend API key.
-    *   Set **Site URL** to `NEXT_PUBLIC_SITE_URL` (e.g. `https://losqq.com`) and add **Redirect URLs**: `https://losqq.com/auth/callback` (and `https://losqq.com/**` if you use wildcards).
-    *   **Email templates:** Registration uses a **confirmation link** (not a pasted code). In **Confirm signup**, use e.g. `<a href="{{ .ConfirmationURL }}">Confirmar mi cuenta</a>`. **Reset password** should use `{{ .ConfirmationURL }}` as well.
-    *   **Site URL** and **Redirect URLs** must include `https://your-domain/auth/callback`.
-    *   Configure SMTP (e.g. Resend) if emails do not arrive.
-    *   Test signup confirmation and password reset in staging before going live.
-
-## Inviting players (QR / link)
-
-Each league has a unique `invite_code`. Share it via:
-
-- **QR or link:** `{NEXT_PUBLIC_SITE_URL}/join/{invite_code}` — shown in the league page under "Compartir".
-- **Short alias:** `/?join=CODE` redirects to `/join/CODE`.
-
-Flow for new users: scan QR → cookie stores pending invite → register → confirm email → auto-join on auth callback. Logged-in users joining via `/join/CODE` are added immediately.
+- Verificar variables de entorno de Production.
+- Probar registro, confirmacion, reset password, flujo de QR y acceso admin.
