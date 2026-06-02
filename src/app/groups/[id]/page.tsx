@@ -388,22 +388,40 @@ export default async function GroupDetailPage({
       )}
 
       <div className="max-w-6xl mx-auto">
-        <nav className="mb-10 flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/groups"
-              className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2 hover:translate-x-[-4px] transition-all"
+        <nav className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <Link
+            href="/groups"
+            className="inline-flex items-center gap-3 min-h-11 w-fit max-w-full px-1 -ml-1 rounded-xl text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:bg-blue-50/80 dark:hover:bg-blue-950/30 active:scale-[0.98] transition-all"
+          >
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/50"
+              aria-hidden
             >
-              ← Mis Ligas
-            </Link>
-            <div className="hidden sm:block w-px h-4 bg-gray-100 dark:bg-zinc-800" />
-            <LeaveGroupButton poolId={Number(poolId)} poolName={pool.name} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <CopyInviteCode code={pool.invite_code} />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </span>
+            Mis Ligas
+          </Link>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2 sm:shrink-0">
+            <CopyInviteCode
+              code={pool.invite_code}
+              className="w-full sm:w-auto"
+            />
             <ShareLeagueQR
               inviteCode={pool.invite_code}
               poolName={pool.name}
+              className="sm:w-auto"
             />
           </div>
         </nav>
@@ -515,7 +533,7 @@ export default async function GroupDetailPage({
             </h2>
 
             {matches.length > 0 ? (
-              <div className="grid grid-cols-1 gap-8">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6">
                 {matches.map((match) => {
                   const prediction = myPredictions?.find((p) => p.match_id === match.id);
                   return (
@@ -542,6 +560,25 @@ export default async function GroupDetailPage({
             {isCreator && <DeletePoolButton poolId={Number(poolId)} />}
           </div>
         </div>
+
+        {!isCreator && (
+          <section
+            className="mt-16 sm:mt-20 pt-8 sm:pt-10 border-t border-gray-100 dark:border-zinc-800"
+            aria-label="Salir de la liga"
+          >
+            <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left sm:gap-8">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 leading-relaxed max-w-md">
+                Si abandonas la liga dejarás de ver el ranking y las predicciones del
+                grupo.
+              </p>
+              <LeaveGroupButton
+                poolId={Number(poolId)}
+                poolName={pool.name}
+                className="w-full sm:w-auto"
+              />
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

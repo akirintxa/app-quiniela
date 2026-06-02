@@ -321,8 +321,8 @@ export default function MatchCard({
   );
 
   const BracketSlotBox = ({ label }: { label: string }) => (
-    <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/50 px-1">
-      <span className="text-[7px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-tight text-center leading-tight line-clamp-3">
+    <div className="w-9 h-9 sm:w-16 sm:h-16 shrink-0 rounded-xl sm:rounded-2xl flex items-center justify-center sm:mb-3 border-2 border-dashed border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/50 px-0.5 sm:px-1">
+      <span className="text-[6px] sm:text-[7px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-tight text-center leading-tight line-clamp-3">
         {label}
       </span>
     </div>
@@ -352,28 +352,28 @@ export default function MatchCard({
     }
     if (!team) {
       return (
-        <div className="relative group/icon">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700">
-            <BallIcon />
+        <div className="relative group/icon shrink-0">
+          <div className="w-9 h-9 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center sm:mb-3 border-2 bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700">
+            <BallIcon size={18} />
           </div>
         </div>
       );
     }
     const flag = getFlagUrl(team);
     return (
-      <div className="relative group/icon">
-        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
+      <div className="relative group/icon shrink-0">
+        <div className={`w-9 h-9 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center sm:mb-3 border-2 transition-all overflow-hidden ${isSelected ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-gray-100 dark:bg-zinc-800 border-gray-100 dark:border-zinc-700'}`}>
           {flag ? (
             <img src={flag} alt={team.name} className="w-full h-full object-cover" onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
               const parent = (e.target as HTMLImageElement).parentElement;
               if (parent) parent.classList.add('bg-gray-200');
             }} />
-          ) : <BallIcon />}
+          ) : <BallIcon size={18} />}
         </div>
         {isKnockout && team && (isConfirmed || isProjected) && (
           <div
-            className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center shadow-sm ${
+            className={`absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 border-white dark:border-zinc-900 flex items-center justify-center shadow-sm ${
               isConfirmed ? "bg-green-500" : "bg-blue-400 animate-pulse"
             }`}
             title={isConfirmed ? "Clasificado (oficial)" : "Clasificado (tu pronóstico)"}
@@ -389,101 +389,213 @@ export default function MatchCard({
     );
   };
 
+  const dateLabel = startTime.toLocaleDateString([], {
+    day: "2-digit",
+    month: "short",
+  });
+  const timeLabel = startTime.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return (
-    <div className={`bg-white dark:bg-zinc-900 rounded-[3rem] shadow-sm border transition-all overflow-hidden ${
-      isFinished ? 'border-blue-500 ring-4 ring-blue-500/10' : 
-      isLive ? 'border-red-500 ring-4 ring-red-500/10' :
-      showSavedState ? 'border-green-500 ring-4 ring-green-500/10' : 'border-gray-100 dark:border-zinc-800'
-    }`}>
+    <div
+      className={`bg-white dark:bg-zinc-900 rounded-2xl sm:rounded-[3rem] shadow-sm border transition-all overflow-hidden h-full ${
+        isFinished
+          ? "border-blue-500 ring-2 sm:ring-4 ring-blue-500/10"
+          : isLive
+            ? "border-red-500 ring-2 sm:ring-4 ring-red-500/10"
+            : showSavedState
+              ? "border-green-500 ring-2 sm:ring-4 ring-green-500/10"
+              : "border-gray-100 dark:border-zinc-800"
+      }`}
+    >
       {isFinished ? (
-        <div className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2.5 text-center shadow-inner">Partido Finalizado</div>
+        <div className="bg-blue-600 text-white text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] py-1.5 sm:py-2.5 text-center shadow-inner">
+          Finalizado
+        </div>
       ) : isLive ? (
-        <div className="bg-red-600 text-white text-[10px] font-black uppercase tracking-[0.3em] py-2.5 text-center animate-pulse shadow-inner flex items-center justify-center gap-2">
-          <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
-          En Vivo • Resultado Parcial
+        <div className="bg-red-600 text-white text-[8px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] py-1.5 sm:py-2.5 text-center animate-pulse shadow-inner flex items-center justify-center gap-1.5">
+          <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-white rounded-full"></span>
+          En vivo
         </div>
       ) : null}
 
-      <div className="p-8">
-        <div className="flex flex-col items-center">
-          <div className="flex justify-between w-full mb-8 px-1">
-            <div className="flex items-center gap-2">
-              <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${isLive ? 'bg-red-50 text-red-600 dark:bg-red-950/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
-                {getStageName(match.stage, match.group_id)}
-              </span>
-              {isKnockout && (
-                <span className="text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg">
-                  #{match.id}
-                </span>
-              )}
-            </div>
-            {expectedMatchup && (
-              <span className="text-[8px] font-black text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2 py-1 rounded-md border border-gray-100 dark:border-zinc-800">
-                {expectedMatchup}
+      <div className="relative p-3 pt-7 sm:p-8 sm:pt-8">
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 pointer-events-none z-10">
+          <div className="flex items-center gap-1 min-w-0">
+            <span
+              className={`text-[7px] sm:text-[9px] font-black uppercase tracking-wider sm:tracking-widest px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-md sm:rounded-lg truncate max-w-[5.5rem] sm:max-w-none ${
+                isLive
+                  ? "bg-red-50 text-red-600 dark:bg-red-950/20"
+                  : "bg-blue-50 text-blue-600 dark:bg-blue-900/20"
+              }`}
+            >
+              {getStageName(match.stage, match.group_id)}
+            </span>
+            {isKnockout && (
+              <span className="hidden sm:inline text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg">
+                #{match.id}
               </span>
             )}
-            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
-              {startTime.toLocaleDateString([], { day: '2-digit', month: 'short' })} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
           </div>
+          <span className="text-[7px] sm:text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wide shrink-0 tabular-nums">
+            {dateLabel} {timeLabel}
+          </span>
+        </div>
 
+        {expectedMatchup && (
+          <p className="hidden sm:block text-[8px] font-black text-gray-400 bg-gray-50 dark:bg-zinc-800/50 px-2 py-1 rounded-md border border-gray-100 dark:border-zinc-800 mb-3 text-center">
+            {expectedMatchup}
+          </p>
+        )}
+
+        <div className="flex flex-col items-center">
           {(isLive || isFinished) && (
-            <div className={`mb-6 flex flex-col items-center p-4 rounded-3xl w-full transition-all border-2 ${isLive ? 'bg-red-50/50 border-red-100 dark:bg-red-950/10 dark:border-red-900/20 shadow-lg' : 'bg-gray-50 border-gray-100 dark:bg-zinc-800/50 dark:border-zinc-700'}`}>
-              <span className={`text-[9px] font-black uppercase tracking-[0.3em] mb-2 ${isLive ? 'text-red-500' : 'text-gray-400'}`}>
-                {isLive ? 'Marcador Actual' : 'Resultado Final'}
+            <div
+              className={`mb-2 sm:mb-6 flex flex-col sm:flex-col items-center p-2 sm:p-4 rounded-xl sm:rounded-3xl w-full transition-all border ${
+                isLive
+                  ? "bg-red-50/50 border-red-100 dark:bg-red-950/10 dark:border-red-900/20"
+                  : "bg-gray-50 border-gray-100 dark:bg-zinc-800/50 dark:border-zinc-700"
+              }`}
+            >
+              <span
+                className={`text-[7px] sm:text-[9px] font-black uppercase tracking-widest mb-0.5 sm:mb-2 ${
+                  isLive ? "text-red-500" : "text-gray-400"
+                }`}
+              >
+                {isLive ? "Marcador" : "Resultado"}
               </span>
-              <div className="flex items-center gap-6">
-                <span className={`text-4xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{match.result_a ?? 0}</span>
-                <span className={`text-xl font-black ${isLive ? 'text-red-300' : 'text-gray-300'}`}>-</span>
-                <span className={`text-4xl font-black ${isLive ? 'text-red-600' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{match.result_b ?? 0}</span>
+              <div className="flex items-center gap-2 sm:gap-6">
+                <span
+                  className={`text-xl sm:text-4xl font-black tracking-tighter ${
+                    isLive ? "text-red-600" : "text-gray-900 dark:text-white"
+                  }`}
+                >
+                  {match.result_a ?? 0}
+                </span>
+                <span
+                  className={`text-sm sm:text-xl font-black ${
+                    isLive ? "text-red-300" : "text-gray-300"
+                  }`}
+                >
+                  -
+                </span>
+                <span
+                  className={`text-xl sm:text-4xl font-black tracking-tighter ${
+                    isLive ? "text-red-600" : "text-gray-900 dark:text-white"
+                  }`}
+                >
+                  {match.result_b ?? 0}
+                </span>
               </div>
               {decidedOnPenalties && (
-                <div className="mt-3 text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl px-3 py-1">
+                <div className="mt-1 sm:mt-3 text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-lg sm:rounded-xl px-2 py-0.5 sm:px-3 sm:py-1 text-center leading-tight">
                   {penaltyWinnerName
-                    ? `Gana en penales: ${penaltyWinnerName}`
-                    : "Definido en penales (ganador registrado)"}
+                    ? `Penales: ${penaltyWinnerName}`
+                    : "Penales"}
                 </div>
               )}
             </div>
           )}
 
-          <div className="flex items-center justify-between w-full gap-2 sm:gap-4 mb-8">
-            <button 
+          <div className="flex items-center justify-between w-full gap-1 sm:gap-4 mb-2 sm:mb-8 mt-1 sm:mt-0">
+            <button
+              type="button"
               disabled={!isDraw || isLocked || !isKnockout || showBracketSlotA}
               onClick={() => patchScores({ winnerId: match.team_a_id })}
-              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_a_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
+              className={`flex-1 min-w-0 flex flex-row sm:flex-col items-center sm:text-center gap-1 sm:gap-0 p-1 sm:p-2 rounded-xl sm:rounded-3xl transition-all ${
+                effectiveWinnerId === match.team_a_id && isDraw
+                  ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-500 sm:border-2 sm:scale-105"
+                  : "border border-transparent"
+              }`}
             >
-              <TeamIcon team={match.team_a} isSelected={effectiveWinnerId === match.team_a_id && isDraw} isConfirmed={match.is_confirmed_a} isProjected={match.is_projected_a} bracketOnly={showBracketSlotA} bracketLabel={slotLabelA} />
-              <div className={`flex flex-col items-center justify-center ${showBracketSlotA ? "min-h-0" : "h-8"}`}>
+              <TeamIcon
+                team={match.team_a}
+                isSelected={effectiveWinnerId === match.team_a_id && isDraw}
+                isConfirmed={match.is_confirmed_a}
+                isProjected={match.is_projected_a}
+                bracketOnly={showBracketSlotA}
+                bracketLabel={slotLabelA}
+              />
+              <div
+                className={`flex flex-col items-start sm:items-center justify-center min-w-0 flex-1 ${showBracketSlotA ? "min-h-0" : "sm:h-8"}`}
+              >
                 {!showBracketSlotA && (
-                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamAName}</span>
+                  <span className="text-[8px] sm:text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight leading-tight line-clamp-2 sm:line-clamp-2 w-full text-left sm:text-center">
+                    {teamAName}
+                  </span>
                 )}
                 {match.ghost_team_a && (
-                  <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
+                  <span className="hidden sm:block text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
                     Pronóstico: {match.ghost_team_a}
                   </span>
                 )}
               </div>
-              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
+              {isDraw && isKnockout && (
+                <span className="hidden sm:inline text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">
+                  ¿Clasifica?
+                </span>
+              )}
             </button>
 
-            <div className="flex flex-col items-center gap-1 flex-shrink-0">
-              <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">{isFinished ? 'Tu Pronóstico' : 'Tu Predicción'}</span>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <input type="number" min="0" value={effectiveScoreA} onChange={(e) => patchScores({ scoreA: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isLocked} />
-                <span className="text-gray-300 font-black">:</span>
-                <input type="number" min="0" value={effectiveScoreB} onChange={(e) => patchScores({ scoreB: e.target.value === "" ? "" : Number(e.target.value) })} onBlur={() => flush()} className={`w-12 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl outline-none ${isLocked ? 'bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner' : 'bg-white dark:bg-zinc-800 border-2 border-gray-100 focus:border-blue-500 text-gray-900 dark:text-white'}`} placeholder="-" disabled={!userId || isLocked} />
+            <div className="flex flex-col items-center gap-0.5 sm:gap-1 shrink-0 px-0.5">
+              <span className="hidden sm:block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                {isFinished ? "Tu Pronóstico" : "Tu Predicción"}
+              </span>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={effectiveScoreA}
+                  onChange={(e) =>
+                    patchScores({
+                      scoreA:
+                        e.target.value === "" ? "" : Number(e.target.value),
+                    })
+                  }
+                  onBlur={() => flush()}
+                  className={`w-9 h-9 sm:w-14 sm:h-14 text-center text-base sm:text-2xl font-black rounded-lg sm:rounded-2xl outline-none ${
+                    isLocked
+                      ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner"
+                      : "bg-white dark:bg-zinc-800 border border-gray-100 sm:border-2 focus:border-blue-500 text-gray-900 dark:text-white"
+                  }`}
+                  placeholder="-"
+                  disabled={!userId || isLocked}
+                />
+                <span className="text-gray-300 font-black text-sm sm:text-base">
+                  :
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={effectiveScoreB}
+                  onChange={(e) =>
+                    patchScores({
+                      scoreB:
+                        e.target.value === "" ? "" : Number(e.target.value),
+                    })
+                  }
+                  onBlur={() => flush()}
+                  className={`w-9 h-9 sm:w-14 sm:h-14 text-center text-base sm:text-2xl font-black rounded-lg sm:rounded-2xl outline-none ${
+                    isLocked
+                      ? "bg-gray-100 dark:bg-zinc-800 text-gray-400 border-none shadow-inner"
+                      : "bg-white dark:bg-zinc-800 border border-gray-100 sm:border-2 focus:border-blue-500 text-gray-900 dark:text-white"
+                  }`}
+                  placeholder="-"
+                  disabled={!userId || isLocked}
+                />
               </div>
               {initialPrediction?.points_won != null && isFinished && (
-                <div className="mt-3 flex flex-col items-center gap-1 animate-in zoom-in duration-300">
-                  <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[8px] font-black uppercase tracking-widest">
+                <div className="mt-1 sm:mt-3 flex flex-col items-center gap-0.5 sm:gap-1">
+                  <div className="px-1.5 sm:px-3 py-0.5 bg-green-100 text-green-700 rounded-full text-[7px] sm:text-[8px] font-black uppercase tracking-widest">
                     +{initialPrediction.points_won} pts
                   </div>
                   {initialPrediction.predicted_a != null &&
                     initialPrediction.predicted_b != null &&
                     match.result_a != null &&
                     match.result_b != null && (
-                      <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">
+                      <span className="hidden sm:block text-[7px] font-bold text-gray-400 uppercase tracking-wider text-center">
                         {formatPointsBreakdown(
                           getPointsBreakdown(
                             initialPrediction,
@@ -497,37 +609,63 @@ export default function MatchCard({
               )}
             </div>
 
-            <button 
+            <button
+              type="button"
               disabled={!isDraw || isLocked || !isKnockout || showBracketSlotB}
               onClick={() => patchScores({ winnerId: match.team_b_id })}
-              className={`flex-1 flex flex-col items-center text-center p-2 rounded-3xl transition-all ${effectiveWinnerId === match.team_b_id && isDraw ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500 scale-105' : 'border-2 border-transparent'}`}
+              className={`flex-1 min-w-0 flex flex-row-reverse sm:flex-col items-center sm:text-center gap-1 sm:gap-0 p-1 sm:p-2 rounded-xl sm:rounded-3xl transition-all ${
+                effectiveWinnerId === match.team_b_id && isDraw
+                  ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-500 sm:border-2 sm:scale-105"
+                  : "border border-transparent"
+              }`}
             >
-              <TeamIcon team={match.team_b} isSelected={effectiveWinnerId === match.team_b_id && isDraw} isConfirmed={match.is_confirmed_b} isProjected={match.is_projected_b} bracketOnly={showBracketSlotB} bracketLabel={slotLabelB} />
-              <div className={`flex flex-col items-center justify-center ${showBracketSlotB ? "min-h-0" : "h-8"}`}>
+              <TeamIcon
+                team={match.team_b}
+                isSelected={effectiveWinnerId === match.team_b_id && isDraw}
+                isConfirmed={match.is_confirmed_b}
+                isProjected={match.is_projected_b}
+                bracketOnly={showBracketSlotB}
+                bracketLabel={slotLabelB}
+              />
+              <div
+                className={`flex flex-col items-end sm:items-center justify-center min-w-0 flex-1 ${showBracketSlotB ? "min-h-0" : "sm:h-8"}`}
+              >
                 {!showBracketSlotB && (
-                <span className="text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tighter leading-tight line-clamp-2">{teamBName}</span>
+                  <span className="text-[8px] sm:text-[10px] font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight leading-tight line-clamp-2 sm:line-clamp-2 w-full text-right sm:text-center">
+                    {teamBName}
+                  </span>
                 )}
                 {match.ghost_team_b && (
-                  <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
+                  <span className="hidden sm:block text-[7px] font-bold text-gray-400 uppercase tracking-widest line-clamp-1 mt-0.5">
                     Pronóstico: {match.ghost_team_b}
                   </span>
                 )}
               </div>
-              {isDraw && isKnockout && <span className="text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">¿Clasifica?</span>}
+              {isDraw && isKnockout && (
+                <span className="hidden sm:inline text-[8px] font-black mt-2 uppercase text-blue-600 animate-pulse">
+                  ¿Clasifica?
+                </span>
+              )}
             </button>
           </div>
-          
+
           {!suppressSave && (
-          <div className="w-full flex gap-3">
+          <div className="w-full flex gap-1.5 sm:gap-3">
             {!userId ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-dashed">Entrar para jugar</div>
+              <div className="flex-1 py-2 sm:py-4 text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-gray-400 bg-gray-50 dark:bg-zinc-800 rounded-xl sm:rounded-2xl border border-dashed">
+                Entrar
+              </div>
             ) : isFinished ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/30">Cerrado</div>
+              <div className="flex-1 py-2 sm:py-4 text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-xl sm:rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/30">
+                Cerrado
+              </div>
             ) : isLocked ? (
-              <div className="flex-1 py-4 text-center text-[9px] font-black uppercase tracking-widest rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 animate-pulse">En Juego</div>
+              <div className="flex-1 py-2 sm:py-4 text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-xl sm:rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 animate-pulse">
+                En juego
+              </div>
             ) : (
               <div
-                className={`flex-1 py-4 px-6 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] flex items-center justify-center min-h-[3.25rem] ${
+                className={`flex-1 py-2 sm:py-4 px-2 sm:px-6 rounded-xl sm:rounded-2xl text-[8px] sm:text-[9px] font-black uppercase tracking-wide sm:tracking-[0.2em] flex items-center justify-center min-h-[2rem] sm:min-h-[3.25rem] ${
                   saveStatus === "error"
                     ? "bg-red-50 dark:bg-red-950/20 text-red-600 border border-red-100 dark:border-red-900/30"
                     : showSavedState
@@ -571,8 +709,30 @@ export default function MatchCard({
               </div>
             )}
             {poolId && poolMembers && poolMembers.length > 0 && (
-              <button onClick={fetchGroupPredictions} className={`w-16 flex items-center justify-center rounded-2xl border-2 transition-all ${showSpy ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl' : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <button
+                type="button"
+                onClick={fetchGroupPredictions}
+                className={`w-10 sm:w-16 shrink-0 flex items-center justify-center rounded-xl sm:rounded-2xl border transition-all ${
+                  showSpy
+                    ? "bg-zinc-900 text-white border-zinc-900 shadow-xl"
+                    : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500"
+                }`}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="sm:w-5 sm:h-5"
+                >
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
               </button>
             )}
           </div>
@@ -581,20 +741,24 @@ export default function MatchCard({
       </div>
 
       {showSpy && (
-        <div className="border-t border-gray-50 dark:border-zinc-800 p-8 bg-gray-50/30 dark:bg-zinc-950/20">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 flex items-center gap-3">
-              Ranking de Pronósticos
-              <span className="text-[7px] font-bold normal-case tracking-normal text-gray-300 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> ok
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> pendiente
-                </span>
-              </span>
+        <div className="border-t border-gray-50 dark:border-zinc-800 p-3 sm:p-8 bg-gray-50/30 dark:bg-zinc-950/20 col-span-full">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mb-3 sm:mb-6">
+            <h4 className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-gray-400">
+              Pronósticos de la liga
             </h4>
-            {isLive && <span className="text-[8px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-md animate-pulse">Puntos Live</span>}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[7px] font-bold text-gray-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> ok
+              </span>
+              <span className="text-[7px] font-bold text-gray-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> pendiente
+              </span>
+              {isLive && (
+                <span className="text-[8px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-md animate-pulse">
+                  Live
+                </span>
+              )}
+            </div>
           </div>
           {loadingSpy ? (
             <div className="py-6 text-center text-[9px] font-black text-gray-400 animate-pulse uppercase tracking-widest italic">Cargando...</div>
@@ -608,8 +772,15 @@ export default function MatchCard({
                   displayPoints = calculatePoints(pred, match, knockoutResolved);
                 }
                 return (
-                  <div key={pred.user_id} className="flex justify-between items-center bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm transition-transform hover:translate-x-1">
-                    <div className="flex items-center gap-2 min-w-0">
+                  <div
+                    key={pred.user_id}
+                    className={`bg-white dark:bg-zinc-900 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm ${
+                      poolId
+                        ? "flex flex-col gap-2"
+                        : "flex justify-between items-center transition-transform hover:translate-x-1"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 w-full">
                       <span
                         className={`w-2.5 h-2.5 rounded-full shrink-0 border-2 border-white dark:border-zinc-900 shadow-sm ${
                           pred.phaseComplete ? "bg-green-500" : "bg-orange-500"
@@ -620,22 +791,42 @@ export default function MatchCard({
                             : "Fase incompleta"
                         }
                       />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[10px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tighter truncate">{pred.nickname}</span>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[10px] sm:text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight leading-tight break-words">
+                          {pred.nickname}
+                        </span>
                         {displayPoints !== null && displayPoints !== undefined && (
-                          <span className={`text-[8px] font-black uppercase tracking-widest ${displayPoints > 0 ? 'text-green-600' : 'text-gray-400'}`}>{displayPoints} Puntos</span>
+                          <span
+                            className={`text-[8px] font-black uppercase tracking-widest ${
+                              displayPoints > 0
+                                ? "text-green-600"
+                                : "text-gray-400"
+                            }`}
+                          >
+                            {displayPoints} pts
+                          </span>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div
+                      className={`flex items-center gap-2 shrink-0 ${
+                        poolId ? "justify-center w-full" : "gap-3"
+                      }`}
+                    >
                       {hasPrediction ? (
                         <>
-                          <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_a}</span>
+                          <span className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-lg sm:rounded-xl font-black text-blue-600 text-base sm:text-lg shadow-inner">
+                            {pred.predicted_a}
+                          </span>
                           <span className="font-black text-gray-200">:</span>
-                          <span className="w-10 h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-xl font-black text-blue-600 text-lg shadow-inner">{pred.predicted_b}</span>
+                          <span className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-50 dark:bg-zinc-800 rounded-lg sm:rounded-xl font-black text-blue-600 text-base sm:text-lg shadow-inner">
+                            {pred.predicted_b}
+                          </span>
                         </>
                       ) : (
-                        <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic px-2">Sin predicción</span>
+                        <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic px-2">
+                          Sin predicción
+                        </span>
                       )}
                     </div>
                   </div>

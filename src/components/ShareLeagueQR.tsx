@@ -7,9 +7,11 @@ import { getJoinUrl } from "@/lib/join-url";
 export default function ShareLeagueQR({
   inviteCode,
   poolName,
+  className = "",
 }: {
   inviteCode: string;
   poolName: string;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export default function ShareLeagueQR({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 rounded-full border bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500 hover:text-blue-600 transition-all active:scale-95"
+        className={`flex items-center justify-center gap-2 min-h-11 w-full px-4 py-2.5 rounded-2xl border bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500 hover:text-blue-600 transition-all active:scale-95 ${className}`}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

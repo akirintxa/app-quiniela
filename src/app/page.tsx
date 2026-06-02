@@ -439,7 +439,7 @@ export default async function Home({
                 </div>
               )}
               {matches.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                <div className="grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 mt-4 sm:mt-8">
                   {matches.map((match) => (
                     <MatchCard
                       key={match.id}
@@ -475,7 +475,7 @@ export default async function Home({
                     <h2 className="text-[10px] font-black uppercase tracking-[0.4em] whitespace-nowrap">{date}</h2>
                     <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900"></div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4 md:gap-6">
                     {dayMatches.map((match) => (
                       <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
                     ))}

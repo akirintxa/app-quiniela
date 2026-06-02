@@ -3,7 +3,13 @@
 
 import { useState } from "react";
 
-export default function CopyInviteCode({ code }: { code: string }) {
+export default function CopyInviteCode({
+  code,
+  className = "",
+}: {
+  code: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -19,7 +25,7 @@ export default function CopyInviteCode({ code }: { code: string }) {
   return (
     <button 
       onClick={handleCopy}
-      className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all active:scale-95 ${
+      className={`flex items-center justify-center gap-2 min-h-11 px-4 py-2.5 rounded-2xl border transition-all active:scale-95 ${className} ${
         copied 
           ? 'bg-green-50 border-green-200 text-green-600' 
           : 'bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 text-gray-400 hover:border-blue-500 hover:text-blue-600'
