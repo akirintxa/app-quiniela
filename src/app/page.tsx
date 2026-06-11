@@ -26,6 +26,10 @@ import {
   buildBestThirdPlacesView,
   EMPTY_BEST_THIRDS_VIEW,
 } from "@/lib/best-thirds-view";
+import {
+  formatMatchDayHeading,
+  getMatchDayKey,
+} from "@/lib/match-datetime";
 
 export default async function Home({
   searchParams,
@@ -253,12 +257,17 @@ export default async function Home({
     predictedStandings = calculateStandings(simulatedMatches as Match[], groupTeams);
   }
 
-  const groupedMatches: Record<string, Match[]> = {};
+  const groupedMatches: Record<string, { label: string; matches: Match[] }> = {};
   if ((view === "today" || view === "results") && matches) {
-    matches.forEach(match => {
-      const date = new Date(match.start_time).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-      if (!groupedMatches[date]) groupedMatches[date] = [];
-      groupedMatches[date].push(match);
+    matches.forEach((match) => {
+      const dayKey = getMatchDayKey(match.start_time);
+      if (!groupedMatches[dayKey]) {
+        groupedMatches[dayKey] = {
+          label: formatMatchDayHeading(match.start_time),
+          matches: [],
+        };
+      }
+      groupedMatches[dayKey].matches.push(match);
     });
   }
 
@@ -469,14 +478,14 @@ export default async function Home({
             </div>
           ) : (view === "today" || view === "results") ? (
             Object.entries(groupedMatches).length > 0 ? (
-              Object.entries(groupedMatches).map(([date, dayMatches]) => (
-                <div key={date} className="space-y-6">
+              Object.entries(groupedMatches).map(([dayKey, day]) => (
+                <div key={dayKey} className="space-y-6">
                   <div className="flex items-center gap-4 text-gray-400">
-                    <h2 className="text-[10px] font-black uppercase tracking-[0.4em] whitespace-nowrap">{date}</h2>
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.4em] whitespace-nowrap capitalize">{day.label}</h2>
                     <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900"></div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:gap-4 md:gap-6">
-                    {dayMatches.map((match) => (
+                    {day.matches.map((match) => (
                       <MatchCard key={match.id} match={match} userId={user?.id} initialPrediction={predictions.find(p => p.match_id === match.id)} />
                     ))}
                   </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Match, Prediction } from "@/types";
 import { savePrediction, fetchPoolMatchPredictions } from "@/app/actions";
 import { getKnockoutPenaltyWinnerDisplayName } from "@/lib/match-admin";
+import { formatMatchDateShort, formatMatchTime } from "@/lib/match-datetime";
 import {
   calculatePoints,
   formatPointsBreakdown,
@@ -389,14 +390,8 @@ export default function MatchCard({
     );
   };
 
-  const dateLabel = startTime.toLocaleDateString([], {
-    day: "2-digit",
-    month: "short",
-  });
-  const timeLabel = startTime.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const dateLabel = formatMatchDateShort(match.start_time);
+  const timeLabel = formatMatchTime(match.start_time);
 
   return (
     <div
