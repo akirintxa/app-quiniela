@@ -111,7 +111,7 @@ export default async function AdminPage({
               1. Iniciar 0-0 · 2. Actualizar marcador · 3. Finalizar · Partido cerrado: &quot;Guardar corrección&quot; · ↺ Reiniciar
             </p>
             <p className="text-[9px] text-blue-600/80 dark:text-blue-400/80 font-bold uppercase tracking-widest mt-2 max-w-lg leading-relaxed">
-              Sync automático cada ~3 min vía API-Football (jun–jul 2026). Usa este panel si falla el cron, hay penales sin mapear o necesitas corregir un marcador.
+              Sync vía API-Football (cron externo o manual). Usa este panel si falla el sync, hay penales sin mapear o necesitas corregir un marcador.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 justify-end shrink-0">

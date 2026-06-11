@@ -20,22 +20,28 @@ Stack principal:
 
 ## Sincronización automática de resultados
 
-Los marcadores se actualizan cada **~3 minutos** durante el Mundial (cron en Vercel) usando [API-Football](https://www.api-football.com/) (`api-sports.io`).
+Marcadores vía [API-Football](https://www.api-football.com/) (`api-sports.io`).
 
 - Lógica: [`src/lib/fifa-sync.ts`](src/lib/fifa-sync.ts) → mismas reglas que `/admin` ([`src/lib/match-sync.ts`](src/lib/match-sync.ts)).
 - Endpoint: `GET /api/cron/sync-matches` (protegido con `CRON_SECRET`).
-- Horario activo: ~11:00–02:00 hora de Caracas, jun–jul 2026 (ahorra cuota del plan free).
-- La app ya propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
+- Horario activo del sync: ~11:00–02:00 hora de Caracas, jun–jul 2026 (ahorra cuota API free).
+- La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
 
-**Fallback manual:** si el sync falla, un partido no se mapea o hay que corregir penales, usa `/admin`.
+**Vercel Hobby** no permite cron cada 3 min (solo 1×/día). Opciones:
 
-**Supabase (una vez):** ejecuta [`matches_external_fixture.sql`](matches_external_fixture.sql) para columnas `external_fixture_id` y `last_synced_at`.
+1. **cron-job.org** (gratis): job cada 3 min → `GET https://www.losqq.com/api/cron/sync-matches` con header `Authorization: Bearer TU_CRON_SECRET`.
+2. **Vercel Pro**: puedes volver a añadir `vercel.json` con `*/3 * * * *`.
+3. **`/admin` manual** siempre disponible como respaldo.
 
-**Prueba manual del cron:**
+**Fallback manual:** penales sin mapear o API caída → `/admin`.
+
+**Supabase (una vez):** [`matches_external_fixture.sql`](matches_external_fixture.sql).
+
+**Prueba:**
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://losqq.com/api/cron/sync-matches?force=1"
+  "https://www.losqq.com/api/cron/sync-matches?force=1"
 ```
 
 ## Variables de entorno
