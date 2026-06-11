@@ -20,6 +20,8 @@ export interface Match {
   is_finished: boolean;
   bracket_round?: number | null;
   bracket_index?: number | null;
+  external_fixture_id?: string | null;
+  last_synced_at?: string | null;
 }
 
 export interface Prediction {

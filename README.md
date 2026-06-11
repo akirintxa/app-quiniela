@@ -18,13 +18,25 @@ Stack principal:
 - Ranking de jugadores y ranking de ligas.
 - Panel `/admin` protegido por variable de entorno (`ADMIN_EMAIL`).
 
-## Pendiente importante
+## Sincronización automática de resultados
 
-La **integracion automatica de resultados** (feed externo + actualizacion en vivo) **aun no esta implementada**.
+Los marcadores se actualizan cada **~3 minutos** durante el Mundial (cron en Vercel) usando [API-Football](https://www.api-football.com/) (`api-sports.io`).
 
-- Hoy, la carga y cierre de resultados se hace manualmente en `/admin`.
-- Existe el modulo base para esta integracion en `src/lib/fifa-sync.ts`, pero actualmente lanza error de "no implementado".
-- Objetivo futuro: cron/webhook que consuma fuente oficial y dispare las mismas acciones de admin (`startMatch`, `updateLiveScore`, `finalizeMatch`).
+- Lógica: [`src/lib/fifa-sync.ts`](src/lib/fifa-sync.ts) → mismas reglas que `/admin` ([`src/lib/match-sync.ts`](src/lib/match-sync.ts)).
+- Endpoint: `GET /api/cron/sync-matches` (protegido con `CRON_SECRET`).
+- Horario activo: ~11:00–02:00 hora de Caracas, jun–jul 2026 (ahorra cuota del plan free).
+- La app ya propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
+
+**Fallback manual:** si el sync falla, un partido no se mapea o hay que corregir penales, usa `/admin`.
+
+**Supabase (una vez):** ejecuta [`matches_external_fixture.sql`](matches_external_fixture.sql) para columnas `external_fixture_id` y `last_synced_at`.
+
+**Prueba manual del cron:**
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://losqq.com/api/cron/sync-matches?force=1"
+```
 
 ## Variables de entorno
 
@@ -36,6 +48,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ADMIN_EMAIL=tu@email.com,otro@email.com
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+API_FOOTBALL_KEY=tu_clave_api_sports
+API_FOOTBALL_LEAGUE_ID=1
+API_FOOTBALL_SEASON=2026
+CRON_SECRET=secreto_largo_aleatorio
 ```
 
 Notas:

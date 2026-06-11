@@ -8,8 +8,14 @@ import {
 } from '@/utils/supabase/admin';
 import { randomResultForMatch } from '@/lib/admin-random-scores';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
-import { calculatePoints, isKnockoutStage } from '@/lib/points';
-import { loadResolvedKnockoutMatch } from '@/lib/knockout-points-context';
+import {
+  finalizeMatchSync,
+  startMatchSync,
+  updateLiveScoreSync,
+  updatePredictionsPoints,
+  loadMatchRow,
+} from '@/lib/match-sync';
+import { revalidateAfterMatchUpdate } from '@/lib/revalidate-app';
 import { isTournamentStarted } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
 import {
@@ -573,89 +579,14 @@ async function getAdminDb() {
   return createServiceRoleClient();
 }
 
-function revalidateAfterMatchUpdate() {
-  revalidatePath("/", "layout");
-  revalidatePath("/admin");
-  revalidatePath("/ranking");
-  revalidatePath("/groups", "layout");
-  revalidatePath("/profile");
-}
-
-async function updatePredictionsPoints(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  matchId: number,
-  matchData: Match
-) {
-  const { data: predictions, error: fetchError } = await supabase
-    .from('predictions')
-    .select('*')
-    .eq('match_id', matchId);
-
-  if (fetchError) {
-    console.error('updatePredictionsPoints fetch:', fetchError);
-    throw new Error(fetchError.message);
-  }
-
-  if (!predictions?.length) return;
-
-  const resolvedKnockout = isKnockoutStage(matchData.stage)
-    ? await loadResolvedKnockoutMatch(supabase, matchId, matchData.stage)
-    : null;
-
-  for (const pred of predictions) {
-    const points = calculatePoints(
-      pred as Prediction,
-      matchData,
-      resolvedKnockout
-    );
-    const { error } = await supabase
-      .from('predictions')
-      .update({ points_won: points })
-      .eq('id', pred.id);
-    if (error) {
-      console.error('updatePredictionsPoints row:', error);
-      throw new Error(error.message);
-    }
-  }
-}
-
-async function loadMatchForAdmin(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  matchId: number
-): Promise<Match> {
-  const { data, error } = await supabase
-    .from('matches')
-    .select('*')
-    .eq('id', matchId)
-    .single();
-  if (error || !data) throw new Error(error?.message || 'Partido no encontrado');
-  return data as Match;
-}
-
 /** Partido iniciado: 0-0, predicciones bloqueadas, puntos en vivo recalculables */
 export async function startMatch(
   matchId: number
 ): Promise<AdminMatchActionResult> {
   try {
     const supabase = await getAdminDb();
-    const existing = await loadMatchForAdmin(supabase, matchId);
-    const winnerId = resolveKnockoutWinnerId(existing, 0, 0, null);
-
-    const { data: match, error } = await supabase
-      .from('matches')
-      .update({
-        result_a: 0,
-        result_b: 0,
-        winner_id: winnerId,
-        is_locked: true,
-        is_finished: false,
-      })
-      .eq('id', matchId)
-      .select()
-      .single();
-
-    if (error) return { ok: false, error: error.message };
-    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    const result = await startMatchSync(supabase, matchId);
+    if (!result.ok) return result;
     revalidateAfterMatchUpdate();
     return { ok: true };
   } catch (e) {
@@ -672,29 +603,14 @@ export async function updateLiveScore(
 ): Promise<AdminMatchActionResult> {
   try {
     const supabase = await getAdminDb();
-    const existing = await loadMatchForAdmin(supabase, matchId);
-    const resolvedWinner = resolveKnockoutWinnerId(
-      existing,
+    const result = await updateLiveScoreSync(
+      supabase,
+      matchId,
       resultA,
       resultB,
       winnerId
     );
-
-    const { data: match, error } = await supabase
-      .from('matches')
-      .update({
-        result_a: resultA,
-        result_b: resultB,
-        winner_id: resolvedWinner,
-        is_locked: true,
-        is_finished: false,
-      })
-      .eq('id', matchId)
-      .select()
-      .single();
-
-    if (error) return { ok: false, error: error.message };
-    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    if (!result.ok) return result;
     revalidateAfterMatchUpdate();
     return { ok: true };
   } catch (e) {
@@ -710,7 +626,7 @@ export async function finalizeMatch(
 ): Promise<AdminMatchActionResult> {
   try {
     const supabase = await getAdminDb();
-    const existing = await loadMatchForAdmin(supabase, matchId);
+    const existing = await loadMatchRow(supabase, matchId);
     const resolvedWinner = resolveKnockoutWinnerId(
       existing,
       resultA,
@@ -725,21 +641,14 @@ export async function finalizeMatch(
       };
     }
 
-    const { data: match, error } = await supabase
-      .from('matches')
-      .update({
-        result_a: resultA,
-        result_b: resultB,
-        winner_id: resolvedWinner,
-        is_locked: true,
-        is_finished: true,
-      })
-      .eq('id', matchId)
-      .select()
-      .single();
-
-    if (error) return { ok: false, error: error.message };
-    if (match) await updatePredictionsPoints(supabase, matchId, match as Match);
+    const result = await finalizeMatchSync(
+      supabase,
+      matchId,
+      resultA,
+      resultB,
+      winnerId
+    );
+    if (!result.ok) return result;
     revalidateAfterMatchUpdate();
     return { ok: true };
   } catch (e) {

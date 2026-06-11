@@ -108,7 +108,10 @@ export default async function AdminPage({
               Solo para Administradores
             </p>
             <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mt-3 max-w-md leading-relaxed">
-              1. Iniciar 0-0 · 2. Actualizar marcador (tiempo real en la app) · 3. Finalizar · Partido cerrado: editar marcador y &quot;Guardar corrección&quot; (recalcula puntos) · ↺ Reiniciar
+              1. Iniciar 0-0 · 2. Actualizar marcador · 3. Finalizar · Partido cerrado: &quot;Guardar corrección&quot; · ↺ Reiniciar
+            </p>
+            <p className="text-[9px] text-blue-600/80 dark:text-blue-400/80 font-bold uppercase tracking-widest mt-2 max-w-lg leading-relaxed">
+              Sync automático cada ~3 min vía API-Football (jun–jul 2026). Usa este panel si falla el cron, hay penales sin mapear o necesitas corregir un marcador.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 justify-end shrink-0">
