@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function NavbarLinks() {
+export default function NavbarLinks({ showAdmin = false }: { showAdmin?: boolean }) {
   const pathname = usePathname();
 
   const links = [
     { href: "/", label: "Mis Predicciones" },
     { href: "/groups", label: "Mis Ligas" },
     { href: "/ranking", label: "Ranking" },
+    ...(showAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   return (

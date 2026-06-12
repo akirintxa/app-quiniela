@@ -6,6 +6,7 @@ import {
   createServiceRoleClient,
   tryCreateServiceRoleClient,
 } from '@/utils/supabase/admin';
+import { isAppAdminEmail } from "@/lib/app-admin";
 import { randomResultForMatch } from '@/lib/admin-random-scores';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
 import {
@@ -33,14 +34,19 @@ import {
 async function checkAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  
-  // Convertimos el string de env var en un array de correos limpios
-  const adminEmails = process.env.ADMIN_EMAIL?.split(',').map(e => e.trim()) || [];
-  
-  if (!user || !user.email || !adminEmails.includes(user.email)) {
-    throw new Error('Unauthorized');
+
+  if (!user || !isAppAdminEmail(user.email)) {
+    throw new Error("Unauthorized");
   }
   return supabase;
+}
+
+export async function getIsAppAdmin(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return isAppAdminEmail(user?.email);
 }
 
 async function invalidateKnockoutPredictions(

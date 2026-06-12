@@ -1,3 +1,4 @@
+import { isAppAdminEmail } from "@/lib/app-admin";
 import { createClient } from "@/utils/supabase/server";
 import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
@@ -29,10 +30,8 @@ export default async function AdminPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const adminEmails = process.env.ADMIN_EMAIL?.split(',').map(e => e.trim()) || [];
-
-  if (!user || !user.email || !adminEmails.includes(user.email)) {
-    redirect('/');
+  if (!user || !isAppAdminEmail(user.email)) {
+    redirect("/");
   }
 
   const resolvedSearchParams = await searchParams;

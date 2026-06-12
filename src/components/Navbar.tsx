@@ -3,6 +3,7 @@ import Link from "next/link";
 import NavbarLinks from "./NavbarLinks";
 import MobileNavbarLinks from "./MobileNavbarLinks";
 import UserMenu from "./UserMenu";
+import { isAppAdminEmail } from "@/lib/app-admin";
 import { fetchProfileFields, getFavoriteTeamFlagUrl } from "@/lib/profile";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function Navbar() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  const isAdmin = isAppAdminEmail(user?.email);
 
   let initialNickname: string | null = null;
   let initialFlagUrl: string | null = null;
@@ -39,7 +42,7 @@ export default async function Navbar() {
 
         {/* Links - Solo visibles si está logueado */}
         <div className="flex items-center gap-4 sm:gap-8">
-          {user && <NavbarLinks />}
+          {user && <NavbarLinks showAdmin={isAdmin} />}
           
           {user ? (
             <UserMenu
@@ -68,7 +71,7 @@ export default async function Navbar() {
       </div>
       
       {/* Mobile Links (Only visible on small screens and if logged in) */}
-      {user && <MobileNavbarLinks />}
+      {user && <MobileNavbarLinks showAdmin={isAdmin} />}
     </nav>
   );
 }

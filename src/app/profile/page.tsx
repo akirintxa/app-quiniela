@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
-import { updateProfile } from "../actions";
+import Link from "next/link";
+import { getIsAppAdmin, updateProfile } from "../actions";
 import { getTeamFlagUrl } from "@/lib/team-flag";
 import { fetchProfileFields } from "@/lib/profile";
 import {
@@ -32,6 +33,7 @@ export default function ProfilePage() {
   });
   const [bonusAwards, setBonusAwards] = useState<FavoriteBonusAward[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
@@ -98,6 +100,7 @@ export default function ProfilePage() {
       }
 
       setFavoriteTeamLocked(await isFavoriteTeamChangeLocked(supabase));
+      setIsAdmin(await getIsAppAdmin());
 
       const { data: preds } = await supabase
         .from("predictions")
@@ -218,6 +221,30 @@ export default function ProfilePage() {
             {user?.email}
           </p>
         </header>
+
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-[10px] font-black uppercase tracking-widest text-zinc-700 dark:text-zinc-200 hover:border-blue-500 hover:text-blue-600 transition-all"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Panel de administración
+          </Link>
+        )}
 
         {bonusAwards.length > 0 && (
           <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 rounded-3xl p-5 space-y-2">
