@@ -4,6 +4,7 @@ import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
 import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
 import AdminResetPhaseButton from "./AdminResetPhaseButton";
+import AdminRecalculatePointsButton from "./AdminRecalculatePointsButton";
 import AdminRefreshButton from "./AdminRefreshButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -113,7 +114,8 @@ export default async function AdminPage({
               Sync vía API-Football (cron externo o manual). Usa este panel si falla el sync, hay penales sin mapear o necesitas corregir un marcador.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 justify-end shrink-0">
+          <div className="flex flex-wrap gap-2 justify-end shrink-0 items-start">
+            <AdminRecalculatePointsButton />
             <AdminRefreshButton />
             <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
               Volver

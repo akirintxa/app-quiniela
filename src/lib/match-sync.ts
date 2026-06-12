@@ -14,7 +14,7 @@ export async function updatePredictionsPoints(
   supabase: ServiceSupabase,
   matchId: number,
   matchData: Match
-) {
+): Promise<number> {
   const { data: predictions, error: fetchError } = await supabase
     .from("predictions")
     .select("*")
@@ -25,7 +25,7 @@ export async function updatePredictionsPoints(
     throw new Error(fetchError.message);
   }
 
-  if (!predictions?.length) return;
+  if (!predictions?.length) return 0;
 
   const resolvedKnockout = isKnockoutStage(matchData.stage)
     ? await loadResolvedKnockoutMatch(supabase, matchId, matchData.stage)
@@ -46,6 +46,33 @@ export async function updatePredictionsPoints(
       throw new Error(error.message);
     }
   }
+
+  return predictions.length;
+}
+
+/** Recalcula points_won de todos los partidos con marcador (p. ej. tras cambiar reglas). */
+export async function recalculateAllFinishedMatchPoints(
+  supabase: ServiceSupabase
+): Promise<{ matches: number; predictions: number }> {
+  const { data: matches, error } = await supabase
+    .from("matches")
+    .select("*")
+    .not("result_a", "is", null)
+    .not("result_b", "is", null)
+    .order("id", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  let predictions = 0;
+  for (const row of matches ?? []) {
+    predictions += await updatePredictionsPoints(
+      supabase,
+      row.id,
+      row as Match
+    );
+  }
+
+  return { matches: matches?.length ?? 0, predictions };
 }
 
 export async function loadMatchRow(

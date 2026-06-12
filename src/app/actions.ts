@@ -11,6 +11,7 @@ import { randomResultForMatch } from '@/lib/admin-random-scores';
 import { resolveKnockoutWinnerId } from '@/lib/match-admin';
 import {
   finalizeMatchSync,
+  recalculateAllFinishedMatchPoints,
   startMatchSync,
   updateLiveScoreSync,
   updatePredictionsPoints,
@@ -838,6 +839,25 @@ export async function randomizePhaseResults(
     return {
       ok: false,
       error: e instanceof Error ? e.message : 'Error al generar resultados',
+    };
+  }
+}
+
+/** Recalcula points_won de todas las predicciones con las reglas actuales */
+export async function recalculateAllPoints(): Promise<
+  | { ok: true; matches: number; predictions: number }
+  | { ok: false; error: string }
+> {
+  try {
+    const supabase = await getAdminDb();
+    const { matches, predictions } =
+      await recalculateAllFinishedMatchPoints(supabase);
+    revalidateAfterMatchUpdate();
+    return { ok: true, matches, predictions };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al recalcular puntos",
     };
   }
 }
