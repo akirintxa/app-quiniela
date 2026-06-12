@@ -20,7 +20,12 @@ export const KNOCKOUT_STAGES = [
 
 export const SCORING_RULES = [
   { points: 2, label: "Ganador", detail: "Aciertas quién gana (o empate)" },
-  { points: 1, label: "Diferencia", detail: "Misma diferencia de goles entre equipos" },
+  {
+    points: 1,
+    label: "Diferencia",
+    detail:
+      "Mismo margen de goles y mismo resultado (victoria local, visitante o empate)",
+  },
   { points: 1, label: "Goles local", detail: "Marcador exacto del equipo A" },
   { points: 1, label: "Goles visita", detail: "Marcador exacto del equipo B" },
 ] as const;
@@ -128,7 +133,7 @@ export function getPointsBreakdown(
     : null;
 
   const winner = isCorrectRegulationOutcome(pA, pB, rA, rB) ? 2 : 0;
-  const difference = Math.abs(pA - pB) === Math.abs(rA - rB) ? 1 : 0;
+  const difference = pA - pB === rA - rB ? 1 : 0;
   const goalsA = pA === rA ? 1 : 0;
   const goalsB = pB === rB ? 1 : 0;
   const qualifier =

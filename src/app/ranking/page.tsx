@@ -11,15 +11,21 @@ import ScoringRulesButton from "@/components/ScoringRulesButton";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
 import {
+  buildLeagueRankings,
   buildPlayerStandings,
+  getCompetitionRankAtIndex,
   sortStandingsByTotal,
 } from "@/lib/global-ranking";
+import {
+  fetchAllPredictionsForRanking,
+  fetchPoolMemberPredictions,
+} from "@/lib/pool-predictions-server";
 import {
   buildKnockoutHistoryLabels,
   buildMatchHistoryRows,
   type MatchHistoryRow,
 } from "@/lib/match-history";
-import { Match, Team } from "@/types";
+import { Match, Prediction, Team } from "@/types";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
@@ -40,6 +46,9 @@ export default async function RankingPage({
   const selectedPoolId = resolvedSearchParams.pool;
   const viewUserId = resolvedSearchParams.view_user;
   const currentView = resolvedSearchParams.view || "players";
+  const poolForView =
+    currentView === "players" ? selectedPoolId ?? "all" : selectedPoolId;
+  const isGlobalRanking = poolForView === "all";
 
   // 1. Fetch user's pools
   const { data: myPools } = await supabase
@@ -47,15 +56,18 @@ export default async function RankingPage({
     .select('pool_id, pools (name)')
     .eq('user_id', user.id);
 
-  const selectedPoolData = myPools?.find(p => String(p.pool_id) === selectedPoolId);
-  const selectedPoolName = (selectedPoolData?.pools as any)?.name;
+  const selectedPoolData = myPools?.find(
+    (p) => String(p.pool_id) === poolForView
+  );
+  const selectedPoolName = isGlobalRanking
+    ? "Global"
+    : (selectedPoolData?.pools as { name?: string } | null)?.name;
 
   // --- LOGIC FOR PLAYERS RANKING ---
   let sortedRanking: any[] = [];
   let userMap: Record<string, any> = {};
   
-  if (currentView === "players") {
-    // 1. Obtener todos los perfiles registrados con su equipo favorito (iso_code)
+  if (currentView === "players" && poolForView) {
     const { data: profiles, error: pError } = await supabase
       .from('profiles')
       .select('id, nickname, favorite_team_id');
@@ -68,32 +80,48 @@ export default async function RankingPage({
     const teamsById = await loadFavoriteTeamsByIds(supabase, favoriteIds);
 
     if (profiles) {
-      let filteredProfiles = profiles;
+      let memberIds: string[];
+      if (isGlobalRanking) {
+        memberIds = profiles.map((p) => p.id);
+      } else {
+        const { data: members } = await supabase
+          .from("pool_members")
+          .select("user_id")
+          .eq("pool_id", Number(poolForView));
+        memberIds = members?.map((m) => m.user_id) ?? [];
+      }
+      const profileById = new Map(profiles.map((p) => [p.id, p]));
 
-      // 2. Si estamos en una liga, filtramos los perfiles
-      if (selectedPoolId && selectedPoolId !== 'all') {
-        const { data: members } = await supabase.from('pool_members').select('user_id').eq('pool_id', Number(selectedPoolId));
-        if (members) {
-          const memberIds = members.map(m => m.user_id);
-          filteredProfiles = profiles.filter(p => memberIds.includes(p.id));
+      let poolPredictions: Prediction[] = [];
+      try {
+        if (isGlobalRanking) {
+          poolPredictions = (await fetchAllPredictionsForRanking()) as Prediction[];
+        } else {
+          poolPredictions = await fetchPoolMemberPredictions(
+            poolForView,
+            user.id,
+            memberIds
+          );
         }
+      } catch (err) {
+        console.error("ranking pool predictions:", err);
       }
 
-      const targetIds = filteredProfiles.map(p => p.id);
-
-      const profileRows = filteredProfiles.map((p) => ({
-        id: p.id,
-        favorite_team_id: p.favorite_team_id,
+      const profileRows = memberIds.map((id) => ({
+        id,
+        favorite_team_id: profileById.get(id)?.favorite_team_id ?? null,
       }));
 
       const standings = sortStandingsByTotal(
-        await buildPlayerStandings(supabase, profileRows)
+        await buildPlayerStandings(
+          supabase,
+          profileRows,
+          poolPredictions.map((p) => ({
+            user_id: p.user_id,
+            points_won: p.points_won,
+          }))
+        )
       );
-
-      const { data: predictionsData } = await supabase
-        .from("predictions")
-        .select("user_id, points_won, match_id")
-        .in("user_id", targetIds);
 
       const { data: finishedMatches } = await supabase
         .from("matches")
@@ -103,11 +131,11 @@ export default async function RankingPage({
       const lastMatchId = finishedMatches?.[0]?.id;
 
       const previousMatchPoints: Record<string, number> = {};
-      targetIds.forEach((id) => {
+      memberIds.forEach((id) => {
         previousMatchPoints[id] = 0;
       });
 
-      predictionsData?.forEach((p) => {
+      poolPredictions.forEach((p) => {
         if (previousMatchPoints[p.user_id] !== undefined) {
           if (
             p.match_id !== lastMatchId &&
@@ -134,60 +162,49 @@ export default async function RankingPage({
         })
         .sort((a, b) => b.points - a.points);
 
-      filteredProfiles.forEach((p) => {
-        const st = standingByUser.get(p.id);
-        const curPos = standings.findIndex((s) => s.userId === p.id);
-        const prePos = previousRanked.findIndex((r) => r.id === p.id);
+      memberIds.forEach((id) => {
+        const p = profileById.get(id);
+        const st = standingByUser.get(id);
+        const curPos = standings.findIndex((s) => s.userId === id);
+        const prePos = previousRanked.findIndex((r) => r.id === id);
         let trend = "same";
         if (lastMatchId) {
           if (curPos < prePos) trend = "up";
           else if (curPos > prePos) trend = "down";
         }
-        const favTeam = p.favorite_team_id ? teamsById.get(p.favorite_team_id) : null;
-        userMap[p.id] = {
-          id: p.id,
-          nickname: p.nickname || "Usuario",
+        const favTeam = p?.favorite_team_id
+          ? teamsById.get(p.favorite_team_id)
+          : null;
+        userMap[id] = {
+          id,
+          nickname: p?.nickname || "Usuario",
           flagUrl: getFavoriteTeamFlagUrl(favTeam ?? null, 40),
           matchPoints: st?.matchPoints ?? 0,
           bonusPoints: st?.bonusPoints ?? 0,
           points: st?.totalPoints ?? 0,
           bonusAwards: [],
           trend,
-          isMe: p.id === user.id,
+          isMe: id === user.id,
         };
       });
 
-      sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
+      sortedRanking = Object.values(userMap)
+        .sort((a, b) => b.points - a.points)
+        .map((member, index, arr) => ({
+          ...member,
+          rank: getCompetitionRankAtIndex(arr, index),
+        }));
     }
   }
 
   // --- LOGIC FOR LEAGUES RANKING ---
-  let leagueRanking: any[] = [];
+  let leagueRanking: Awaited<ReturnType<typeof buildLeagueRankings>> = [];
   if (currentView === "leagues") {
-    const { data: allPools } = await supabase.from('pools').select('id, name');
-    const { data: allMembers } = await supabase.from('pool_members').select('pool_id, user_id');
-    const { data: allPredictions } = await supabase.from('predictions').select('user_id, points_won');
-
-    const userPoints: Record<string, number> = {};
-    allPredictions?.forEach(p => { userPoints[p.user_id] = (userPoints[p.user_id] || 0) + (p.points_won || 0); });
-
-    const leagueMap: Record<number, { name: string, totalPoints: number, members: number }> = {};
-    allPools?.forEach(p => { leagueMap[p.id] = { name: p.name, totalPoints: 0, members: 0 }; });
-
-    allMembers?.forEach(m => {
-      if (leagueMap[m.pool_id]) {
-        leagueMap[m.pool_id].members++;
-        leagueMap[m.pool_id].totalPoints += (userPoints[m.user_id] || 0);
-      }
-    });
-
-    leagueRanking = Object.values(leagueMap)
-      .filter((l) => l.members >= 2)
-      .map((l) => ({
-        ...l,
-        average: Math.round((l.totalPoints / l.members) * 10) / 10,
-      }))
-      .sort((a, b) => b.average - a.average);
+    try {
+      leagueRanking = await buildLeagueRankings(supabase);
+    } catch (err) {
+      console.error("buildLeagueRankings:", err);
+    }
   }
 
   // --- HISTORY MODAL ---
@@ -277,7 +294,7 @@ export default async function RankingPage({
                   </p>
                 </div>
               </div>
-              <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}&view=players` : '/ranking?pool=all&view=players'} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
+              <Link href={`/ranking?pool=${poolForView}&view=players`} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full shadow-sm hover:scale-110 transition-transform">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </Link>
             </div>
@@ -301,15 +318,20 @@ export default async function RankingPage({
         </header>
 
         <div className="flex gap-4 mb-8 justify-center sm:justify-start">
-          <Link href={`/ranking?view=players${selectedPoolId ? `&pool=${selectedPoolId}` : '&pool=all'}`} className={`text-[10px] font-black uppercase tracking-widest pb-2 border-b-4 transition-all ${currentView === 'players' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Jugadores</Link>
+          <Link href={`/ranking?view=players&pool=${poolForView ?? "all"}`} className={`text-[10px] font-black uppercase tracking-widest pb-2 border-b-4 transition-all ${currentView === 'players' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Jugadores</Link>
           <Link href="/ranking?view=leagues" className={`text-[10px] font-black uppercase tracking-widest pb-2 border-b-4 transition-all ${currentView === 'leagues' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400'}`}>Ligas</Link>
         </div>
 
         {currentView === 'players' && (
           <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-100 dark:bg-zinc-900 rounded-2xl w-full sm:w-fit overflow-x-auto no-scrollbar">
-            <Link href="/ranking?pool=all&view=players" className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${(!selectedPoolId || selectedPoolId === 'all') ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>Global</Link>
+            <Link
+              href="/ranking?pool=all&view=players"
+              className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${isGlobalRanking ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}
+            >
+              Global
+            </Link>
             {myPools?.map(p => (
-              <Link key={p.pool_id} href={`/ranking?pool=${p.pool_id}&view=players`} className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${selectedPoolId === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>{(p.pools as any)?.name}</Link>
+              <Link key={p.pool_id} href={`/ranking?pool=${p.pool_id}&view=players`} className={`flex-1 sm:flex-none text-center px-6 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${poolForView === String(p.pool_id) ? 'bg-white dark:bg-zinc-800 text-blue-600 shadow-sm' : 'text-gray-400'}`}>{(p.pools as { name?: string })?.name}</Link>
             ))}
           </div>
         )}
@@ -331,12 +353,12 @@ export default async function RankingPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
-                  {sortedRanking.map((member, index) => (
-                    <tr key={index}>
+                  {sortedRanking.map((member) => (
+                    <tr key={member.id}>
                       <td className="p-0" colSpan={3}>
-                        <Link href={selectedPoolId ? `/ranking?pool=${selectedPoolId}&view=players&view_user=${member.id}` : `/ranking?pool=all&view=players&view_user=${member.id}`} className={`flex items-center w-full px-6 py-5 transition-all group ${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
+                        <Link href={`/ranking?pool=${poolForView}&view=players&view_user=${member.id}`} className={`flex items-center w-full px-6 py-5 transition-all group ${member.isMe ? 'bg-blue-600 text-white' : 'hover:bg-gray-50/50 dark:hover:bg-zinc-800/30'}`}>
                           <div className="w-16 text-center flex-shrink-0 flex flex-col items-center">
-                            <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${index === 0 && !member.isMe ? 'bg-yellow-400 text-yellow-950' : member.isMe ? 'bg-white/20' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'}`}>{index + 1}</span>
+                            <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${member.rank === 1 && !member.isMe ? 'bg-yellow-400 text-yellow-950' : member.isMe ? 'bg-white/20' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'}`}>{member.rank}</span>
                             <div className="mt-1 flex items-center justify-center h-4">
                               {member.trend === 'up' && <div className="flex flex-col items-center animate-in slide-in-from-bottom-1 duration-500"><span className="text-[12px] text-green-500 leading-none">▲</span></div>}
                               {member.trend === 'down' && <div className="flex flex-col items-center animate-in slide-in-from-top-1 duration-500"><span className="text-[12px] text-red-500 leading-none">▼</span></div>}
@@ -374,7 +396,9 @@ export default async function RankingPage({
                   {sortedRanking.length === 0 && (
                     <tr>
                       <td colSpan={3} className="px-8 py-20 text-center text-gray-400 text-xs font-black uppercase tracking-widest opacity-50 italic">
-                        No hay jugadores registrados en esta vista aún
+                        {isGlobalRanking
+                          ? "Aún no hay jugadores registrados"
+                          : "No hay jugadores registrados en esta liga aún"}
                       </td>
                     </tr>
                   )}
@@ -394,10 +418,15 @@ export default async function RankingPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
-                {leagueRanking.map((league, index) => (
-                  <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-all">
+                {leagueRanking.map((league, index) => {
+                  const rank = getCompetitionRankAtIndex(
+                    leagueRanking.map((l) => ({ points: l.average })),
+                    index
+                  );
+                  return (
+                  <tr key={league.poolId} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-all">
                     <td className="px-6 py-6 w-16 text-center">
-                      <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${index === 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'}`}>{index + 1}</span>
+                      <span className={`w-8 h-8 inline-flex items-center justify-center rounded-xl text-[10px] font-black ${rank === 1 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-gray-50 dark:bg-zinc-800 text-gray-400'}`}>{rank}</span>
                     </td>
                     <td className="py-6">
                       <span className="font-black text-sm uppercase tracking-tighter text-gray-900 dark:text-white">{league.name}</span>
@@ -409,7 +438,7 @@ export default async function RankingPage({
                       <div className="font-black text-xl tracking-tighter text-blue-600">{league.average} <span className="text-[10px] text-gray-400">PTS</span></div>
                     </td>
                   </tr>
-                ))}
+                );})}
                 {leagueRanking.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-8 py-20 text-center text-gray-400 text-xs font-black uppercase tracking-widest opacity-50 italic">No hay ligas con suficientes miembros aún</td>

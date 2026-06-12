@@ -16,7 +16,7 @@ import {
   loadMatchRow,
 } from '@/lib/match-sync';
 import { revalidateAfterMatchUpdate } from '@/lib/revalidate-app';
-import { isTournamentStarted } from '@/lib/tournament';
+import { isFavoriteTeamChangeLocked } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
 import {
   getMatchIdsToInvalidateOnGroupChange,
@@ -507,8 +507,8 @@ export async function updateProfile(formData: FormData) {
   
   if (!user) return { error: 'No autorizado' };
 
-  const tournamentStarted = await isTournamentStarted(supabase);
-  if (tournamentStarted) {
+  const favoriteTeamLocked = await isFavoriteTeamChangeLocked(supabase);
+  if (favoriteTeamLocked) {
     const { data: existingProfile } = await supabase
       .from('profiles')
       .select('favorite_team_id')
@@ -521,7 +521,7 @@ export async function updateProfile(formData: FormData) {
     ) {
       return {
         error:
-          'El equipo favorito no se puede cambiar: el torneo ya tiene resultados oficiales',
+          'El equipo favorito no se puede cambiar: todos los equipos ya jugaron al menos un partido',
       };
     }
   }

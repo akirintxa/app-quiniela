@@ -11,9 +11,9 @@ import {
   getTotalPointsWithFavoriteBonus,
   type FavoriteBonusAward,
 } from "@/lib/favorite-bonus";
-import type { Match, Prediction } from "@/types";
-
-type Team = { id: number; name: string; iso_code: string };
+import { aggregateProfileStats } from "@/lib/profile-stats";
+import { isFavoriteTeamChangeLocked } from "@/lib/tournament";
+import type { Match, Team } from "@/types";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -25,7 +25,6 @@ export default function ProfilePage() {
     points: 0,
     bonusPoints: 0,
     predicted: 0,
-    totalFinished: 0,
     plenos: 0,
     diferencias: 0,
     ganadores: 0,
@@ -38,7 +37,7 @@ export default function ProfilePage() {
     null
   );
 
-  const [tournamentStarted, setTournamentStarted] = useState(false);
+  const [favoriteTeamLocked, setFavoriteTeamLocked] = useState(false);
 
   const favoriteTeam = useMemo(
     () => teams.find((t) => String(t.id) === selectedTeamId) ?? null,
@@ -98,50 +97,18 @@ export default function ProfilePage() {
         setTeams((teamsData as Team[]) || []);
       }
 
-      const { count: startedCount } = await supabase
-        .from("matches")
-        .select("id", { count: "exact", head: true })
-        .or("is_finished.eq.true,result_a.not.is.null");
-      setTournamentStarted((startedCount ?? 0) > 0);
-
-      const { count: finishedCount } = await supabase
-        .from("matches")
-        .select("*", { count: "exact", head: true })
-        .eq("is_finished", true);
+      setFavoriteTeamLocked(await isFavoriteTeamChangeLocked(supabase));
 
       const { data: preds } = await supabase
         .from("predictions")
-        .select(`points_won, predicted_a, predicted_b, matches (result_a, result_b)`)
+        .select(
+          `points_won, predicted_a, predicted_b, predicted_winner_id, matches (result_a, result_b, stage, winner_id, team_a_id, team_b_id)`
+        )
         .eq("user_id", authUser.id)
         .not("points_won", "is", null);
 
       if (preds) {
-        let totalPoints = 0;
-        let plenos = 0;
-        let diferencias = 0;
-        let ganadores = 0;
-
-        preds.forEach((p) => {
-          totalPoints += p.points_won || 0;
-          const m = (Array.isArray(p.matches) ? p.matches[0] : p.matches) as {
-            result_a: number;
-            result_b: number;
-          } | null;
-          if (m && m.result_a !== null) {
-            const isPleno =
-              p.predicted_a === m.result_a && p.predicted_b === m.result_b;
-            const isDif = p.predicted_a - p.predicted_b === m.result_a - m.result_b;
-            const isWinner =
-              Math.sign(p.predicted_a - p.predicted_b) ===
-              Math.sign(m.result_a - m.result_b);
-
-            if (isPleno) plenos++;
-            else if (isDif) diferencias++;
-            else if (isWinner) ganadores++;
-          }
-        });
-
-        const totalAciertos = plenos + diferencias + ganadores;
+        const matchStats = aggregateProfileStats(preds);
 
         let favoriteBonus = { total: 0, awards: [] as FavoriteBonusAward[] };
         const favId = profileFields?.favorite_team_id;
@@ -166,17 +133,16 @@ export default function ProfilePage() {
         }
         setBonusAwards(favoriteBonus.awards);
         setStats({
-          points: getTotalPointsWithFavoriteBonus(totalPoints, favoriteBonus),
+          points: getTotalPointsWithFavoriteBonus(
+            matchStats.matchPoints,
+            favoriteBonus
+          ),
           bonusPoints: favoriteBonus.total,
-          predicted: preds.length,
-          totalFinished: finishedCount || 0,
-          plenos,
-          diferencias,
-          ganadores,
-          effectiveness:
-            preds.length > 0
-              ? Math.round((totalAciertos / preds.length) * 100)
-              : 0,
+          predicted: matchStats.scoredPredictions,
+          plenos: matchStats.plenos,
+          diferencias: matchStats.diferencias,
+          ganadores: matchStats.ganadores,
+          effectiveness: matchStats.effectiveness,
         });
       }
 
@@ -286,22 +252,36 @@ export default function ProfilePage() {
           <StatCard
             label="Plenos"
             value={stats.plenos}
-            suffix={`/ ${stats.totalFinished}`}
+            suffix={`/ ${stats.predicted}`}
             accent="text-green-500"
           />
           <StatCard
             label="Diferencias"
             value={stats.diferencias}
-            suffix={`/ ${stats.totalFinished}`}
+            suffix={`/ ${stats.predicted}`}
             accent="text-yellow-500"
           />
           <StatCard
             label="Ganadores"
             value={stats.ganadores}
-            suffix={`/ ${stats.totalFinished}`}
+            suffix={`/ ${stats.predicted}`}
             accent="text-orange-500"
           />
         </div>
+
+        <p className="text-[10px] text-gray-400 dark:text-zinc-500 leading-relaxed px-1 -mt-1">
+          Cada partido puntuado entra en una sola categoría: pleno, diferencia o
+          ganador (en ese orden). La diferencia exige acertar el margen y el
+          resultado (no vale al revés, p. ej. 2-1 ≠ 0-1). Si acertaste ganador y
+          diferencia, cuenta como{" "}
+          <span className="font-bold text-yellow-600 dark:text-yellow-500">
+            diferencia
+          </span>
+          . Los aciertos solo de goles (+1A/+1B) suman puntos pero no aparecen
+          arriba.{" "}
+          <span className="font-bold">Efectividad</span> = partidos con al menos 1
+          punto.
+        </p>
 
         <div className="bg-blue-600 p-5 rounded-3xl text-white shadow-xl shadow-blue-500/20 flex justify-between px-4">
           <div>
@@ -314,9 +294,7 @@ export default function ProfilePage() {
             <span className="text-[8px] font-black uppercase tracking-widest opacity-80">
               Jugados
             </span>
-            <div className="text-2xl font-black">
-              {stats.predicted} / {stats.totalFinished}
-            </div>
+            <div className="text-2xl font-black">{stats.predicted}</div>
           </div>
         </div>
 
@@ -349,9 +327,9 @@ export default function ProfilePage() {
               className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2"
             >
               Equipo favorito
-              {tournamentStarted && (
+              {favoriteTeamLocked && (
                 <span className="ml-2 text-[8px] text-orange-500 normal-case">
-                  (bloqueado: ya hay resultados oficiales)
+                  (bloqueado: todos los equipos ya jugaron al menos un partido)
                 </span>
               )}
             </label>
@@ -360,9 +338,9 @@ export default function ProfilePage() {
               name="favorite_team_id"
               value={selectedTeamId}
               onChange={(e) => setSelectedTeamId(e.target.value)}
-              disabled={tournamentStarted}
+              disabled={favoriteTeamLocked}
               className={`w-full rounded-2xl px-5 py-4 bg-gray-50 dark:bg-zinc-800 border-none outline-none font-black uppercase text-sm focus:ring-2 focus:ring-blue-600 appearance-none ${
-                tournamentStarted ? "opacity-60 cursor-not-allowed" : ""
+                favoriteTeamLocked ? "opacity-60 cursor-not-allowed" : ""
               }`}
             >
               <option value="">Sin equipo</option>

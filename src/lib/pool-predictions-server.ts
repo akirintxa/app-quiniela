@@ -23,13 +23,16 @@ export async function getPoolMemberIds(poolId: string): Promise<string[]> {
   return data?.map((m) => m.user_id) ?? [];
 }
 
+function rankingDbClient() {
+  return tryCreateServiceRoleClient();
+}
+
 async function readPredictionsForUsers(
   userIds: string[]
 ): Promise<Prediction[]> {
   if (userIds.length === 0) return [];
 
-  const admin = tryCreateServiceRoleClient();
-  const client = admin ?? (await createClient());
+  const client = rankingDbClient() ?? (await createClient());
 
   const { data, error } = await client
     .from("predictions")
@@ -38,6 +41,19 @@ async function readPredictionsForUsers(
 
   if (error) throw error;
   return (data ?? []) as Prediction[];
+}
+
+/** Todas las predicciones (service role si está disponible). Solo servidor. */
+export async function fetchAllPredictionsForRanking(): Promise<
+  { user_id: string; points_won: number | null; match_id: number }[]
+> {
+  const client = rankingDbClient() ?? (await createClient());
+  const { data, error } = await client
+    .from("predictions")
+    .select("user_id, points_won, match_id");
+
+  if (error) throw error;
+  return data ?? [];
 }
 
 /** Lee predicciones de todos los miembros de una liga (bypass RLS tras validar membresía). */
@@ -74,8 +90,7 @@ export async function fetchPoolMatchPredictionsForMembers(
   const memberIds = memberProfiles.map((m) => m.id);
   if (memberIds.length === 0) return [];
 
-  const admin = tryCreateServiceRoleClient();
-  const client = admin ?? (await createClient());
+  const client = rankingDbClient() ?? (await createClient());
 
   const { data: preds, error } = await client
     .from("predictions")

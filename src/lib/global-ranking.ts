@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getTotalPointsWithFavoriteBonus } from "./favorite-bonus";
 import { getFavoriteBonusesForUsers } from "./favorite-bonus-server";
+import { fetchAllPredictionsForRanking } from "./pool-predictions-server";
 
 export type ProfileForRanking = {
   id: string;
@@ -66,13 +67,101 @@ export function sortStandingsByTotal(
   return [...standings].sort((a, b) => b.totalPoints - a.totalPoints);
 }
 
-/** Posición 1-based; 0 si el usuario no está en la lista */
+/** Posición con empates (1, 1, 3…): mismos puntos comparten número de puesto */
+export function getCompetitionRankAtIndex(
+  sortedByPointsDesc: { points: number }[],
+  index: number
+): number {
+  const pts = sortedByPointsDesc[index].points;
+  const firstIdx = sortedByPointsDesc.findIndex((s) => s.points === pts);
+  return firstIdx + 1;
+}
+
+/** Posición 1-based con empates; 0 si el usuario no está en la lista */
 export function getRankForUser(
   sortedStandings: PlayerStanding[],
   userId: string
 ): number {
   const idx = sortedStandings.findIndex((s) => s.userId === userId);
-  return idx === -1 ? 0 : idx + 1;
+  if (idx === -1) return 0;
+  return getCompetitionRankAtIndex(
+    sortedStandings.map((s) => ({ points: s.totalPoints })),
+    idx
+  );
+}
+
+export type LeagueStanding = {
+  poolId: number;
+  name: string;
+  members: number;
+  totalPoints: number;
+  average: number;
+};
+
+/** Promedio de puntos (partidos + bono favorito) por liga, mismas reglas que el ranking de jugadores. */
+export async function buildLeagueRankings(
+  supabase: SupabaseClient
+): Promise<LeagueStanding[]> {
+  const [{ data: pools }, { data: members }, { data: profiles }] =
+    await Promise.all([
+      supabase.from("pools").select("id, name"),
+      supabase.from("pool_members").select("pool_id, user_id"),
+      supabase.from("profiles").select("id, favorite_team_id"),
+    ]);
+
+  if (!pools?.length || !members?.length) return [];
+
+  const profileById = new Map(
+    (profiles ?? []).map((p) => [p.id, p.favorite_team_id] as const)
+  );
+
+  const membersByPool = new Map<number, string[]>();
+  for (const m of members) {
+    const list = membersByPool.get(m.pool_id) ?? [];
+    if (!list.includes(m.user_id)) list.push(m.user_id);
+    membersByPool.set(m.pool_id, list);
+  }
+
+  const allUserIds = [...new Set(members.map((m) => m.user_id))];
+  const profileRows: ProfileForRanking[] = allUserIds.map((id) => ({
+    id,
+    favorite_team_id: profileById.get(id) ?? null,
+  }));
+
+  let prefetched: { user_id: string; points_won: number | null }[];
+  try {
+    prefetched = await fetchAllPredictionsForRanking();
+  } catch (e) {
+    console.error("buildLeagueRankings predictions:", e);
+    prefetched = [];
+  }
+
+  const standingsByUser = new Map(
+    (await buildPlayerStandings(supabase, profileRows, prefetched)).map(
+      (s) => [s.userId, s] as const
+    )
+  );
+
+  const results: LeagueStanding[] = [];
+  for (const pool of pools) {
+    const userIds = membersByPool.get(pool.id) ?? [];
+    if (userIds.length < 2) continue;
+
+    const totalPoints = userIds.reduce(
+      (sum, id) => sum + (standingsByUser.get(id)?.totalPoints ?? 0),
+      0
+    );
+
+    results.push({
+      poolId: pool.id,
+      name: pool.name,
+      members: userIds.length,
+      totalPoints,
+      average: Math.round((totalPoints / userIds.length) * 10) / 10,
+    });
+  }
+
+  return results.sort((a, b) => b.average - a.average);
 }
 
 export async function getUserGlobalRankStats(

@@ -21,6 +21,7 @@ import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
 import {
   buildPlayerStandings,
   sortStandingsByTotal,
+  getCompetitionRankAtIndex,
 } from "@/lib/global-ranking";
 import { fetchPoolMemberPredictions } from "@/lib/pool-predictions-server";
 import {
@@ -213,7 +214,12 @@ export default async function GroupDetailPage({
     };
   });
 
-  const sortedRanking = Object.values(userMap).sort((a, b) => b.points - a.points);
+  const sortedRanking = Object.values(userMap)
+    .sort((a, b) => b.points - a.points)
+    .map((member, index, arr) => ({
+      ...member,
+      rank: getCompetitionRankAtIndex(arr, index),
+    }));
 
   let userHistory: MatchHistoryRow[] = [];
   const historyProfile = viewUserId ? userMap[viewUserId] : null;
@@ -468,7 +474,7 @@ export default async function GroupDetailPage({
               <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
-                    {sortedRanking.map((member, index) => (
+                    {sortedRanking.map((member) => (
                       <tr key={member.id} className="group">
                         <td className="p-0">
                           <Link
@@ -480,7 +486,7 @@ export default async function GroupDetailPage({
                             }`}
                           >
                             <div className="w-10 text-center flex-shrink-0 flex flex-col items-center">
-                              <span className="text-[10px] font-black">{index + 1}</span>
+                              <span className="text-[10px] font-black">{member.rank}</span>
                               <div className="h-3 flex items-center">
                                 {member.trend === "up" && (
                                   <span className="text-[8px] text-green-500 animate-bounce">
