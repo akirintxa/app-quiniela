@@ -42,8 +42,8 @@ export async function buildPlayerStandings(
   }
 
   predictions?.forEach((p) => {
-    if (matchPoints[p.user_id] !== undefined) {
-      matchPoints[p.user_id] += p.points_won ?? 0;
+    if (matchPoints[p.user_id] !== undefined && p.points_won != null) {
+      matchPoints[p.user_id] += p.points_won;
     }
   });
 
@@ -164,6 +164,26 @@ export async function buildLeagueRankings(
   return results.sort((a, b) => b.average - a.average);
 }
 
+export async function buildGlobalPlayerStandings(
+  supabase: SupabaseClient
+): Promise<PlayerStanding[]> {
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, favorite_team_id");
+
+  const rows: ProfileForRanking[] = profiles ?? [];
+  let prefetched: { user_id: string; points_won: number | null }[] = [];
+  try {
+    prefetched = await fetchAllPredictionsForRanking();
+  } catch (e) {
+    console.error("buildGlobalPlayerStandings predictions:", e);
+  }
+
+  return sortStandingsByTotal(
+    await buildPlayerStandings(supabase, rows, prefetched)
+  );
+}
+
 export async function getUserGlobalRankStats(
   supabase: SupabaseClient,
   userId: string
@@ -174,14 +194,7 @@ export async function getUserGlobalRankStats(
   rank: number;
   totalPlayers: number;
 }> {
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, favorite_team_id");
-
-  const rows: ProfileForRanking[] = profiles ?? [];
-  const standings = sortStandingsByTotal(
-    await buildPlayerStandings(supabase, rows)
-  );
+  const standings = await buildGlobalPlayerStandings(supabase);
   const mine = standings.find((s) => s.userId === userId);
 
   return {
@@ -189,6 +202,6 @@ export async function getUserGlobalRankStats(
     matchPoints: mine?.matchPoints ?? 0,
     bonusPoints: mine?.bonusPoints ?? 0,
     rank: getRankForUser(standings, userId),
-    totalPlayers: rows.length,
+    totalPlayers: standings.length,
   };
 }

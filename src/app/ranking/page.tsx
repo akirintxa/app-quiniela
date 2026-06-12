@@ -11,6 +11,7 @@ import ScoringRulesButton from "@/components/ScoringRulesButton";
 import { getFavoriteTeamFlagUrl, loadFavoriteTeamsByIds } from "@/lib/profile";
 import { getTotalPointsWithFavoriteBonus } from "@/lib/favorite-bonus";
 import {
+  buildGlobalPlayerStandings,
   buildLeagueRankings,
   buildPlayerStandings,
   getCompetitionRankAtIndex,
@@ -92,36 +93,43 @@ export default async function RankingPage({
       }
       const profileById = new Map(profiles.map((p) => [p.id, p]));
 
-      let poolPredictions: Prediction[] = [];
-      try {
-        if (isGlobalRanking) {
-          poolPredictions = (await fetchAllPredictionsForRanking()) as Prediction[];
-        } else {
-          poolPredictions = await fetchPoolMemberPredictions(
-            poolForView,
-            user.id,
-            memberIds
-          );
-        }
-      } catch (err) {
-        console.error("ranking pool predictions:", err);
-      }
-
       const profileRows = memberIds.map((id) => ({
         id,
         favorite_team_id: profileById.get(id)?.favorite_team_id ?? null,
       }));
 
-      const standings = sortStandingsByTotal(
-        await buildPlayerStandings(
-          supabase,
-          profileRows,
-          poolPredictions.map((p) => ({
-            user_id: p.user_id,
-            points_won: p.points_won,
-          }))
-        )
-      );
+      let poolPredictions: Prediction[] = [];
+      let standings: Awaited<ReturnType<typeof buildPlayerStandings>>;
+
+      if (isGlobalRanking) {
+        standings = await buildGlobalPlayerStandings(supabase);
+        try {
+          poolPredictions = (await fetchAllPredictionsForRanking()) as Prediction[];
+        } catch (err) {
+          console.error("ranking global predictions:", err);
+        }
+      } else {
+        try {
+          poolPredictions = await fetchPoolMemberPredictions(
+            poolForView,
+            user.id,
+            memberIds
+          );
+        } catch (err) {
+          console.error("ranking pool predictions:", err);
+        }
+
+        standings = sortStandingsByTotal(
+          await buildPlayerStandings(
+            supabase,
+            profileRows,
+            poolPredictions.map((p) => ({
+              user_id: p.user_id,
+              points_won: p.points_won,
+            }))
+          )
+        );
+      }
 
       const { data: finishedMatches } = await supabase
         .from("matches")
@@ -141,7 +149,8 @@ export default async function RankingPage({
             p.match_id !== lastMatchId &&
             finishedMatches?.some((m) => m.id === p.match_id)
           ) {
-            previousMatchPoints[p.user_id] += p.points_won || 0;
+            previousMatchPoints[p.user_id] +=
+              p.points_won != null ? p.points_won : 0;
           }
         }
       });

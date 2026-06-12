@@ -2,6 +2,14 @@ import { createClient } from "@/utils/supabase/server";
 import { tryCreateServiceRoleClient } from "@/utils/supabase/admin";
 import { Prediction } from "@/types";
 
+const RANKING_PAGE_SIZE = 1000;
+
+type PredictionRankingRow = {
+  user_id: string;
+  points_won: number | null;
+  match_id: number;
+};
+
 export async function assertPoolMember(poolId: string, userId: string) {
   const supabase = await createClient();
   const { data } = await supabase
@@ -33,27 +41,50 @@ async function readPredictionsForUsers(
   if (userIds.length === 0) return [];
 
   const client = rankingDbClient() ?? (await createClient());
+  const rows: Prediction[] = [];
+  let offset = 0;
 
-  const { data, error } = await client
-    .from("predictions")
-    .select("*")
-    .in("user_id", userIds);
+  while (true) {
+    const { data, error } = await client
+      .from("predictions")
+      .select("*")
+      .in("user_id", userIds)
+      .order("id", { ascending: true })
+      .range(offset, offset + RANKING_PAGE_SIZE - 1);
 
-  if (error) throw error;
-  return (data ?? []) as Prediction[];
+    if (error) throw error;
+    const page = (data ?? []) as Prediction[];
+    rows.push(...page);
+    if (page.length < RANKING_PAGE_SIZE) break;
+    offset += RANKING_PAGE_SIZE;
+  }
+
+  return rows;
 }
 
 /** Todas las predicciones (service role si está disponible). Solo servidor. */
 export async function fetchAllPredictionsForRanking(): Promise<
-  { user_id: string; points_won: number | null; match_id: number }[]
+  PredictionRankingRow[]
 > {
   const client = rankingDbClient() ?? (await createClient());
-  const { data, error } = await client
-    .from("predictions")
-    .select("user_id, points_won, match_id");
+  const rows: PredictionRankingRow[] = [];
+  let offset = 0;
 
-  if (error) throw error;
-  return data ?? [];
+  while (true) {
+    const { data, error } = await client
+      .from("predictions")
+      .select("user_id, points_won, match_id")
+      .order("id", { ascending: true })
+      .range(offset, offset + RANKING_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    const page = (data ?? []) as PredictionRankingRow[];
+    rows.push(...page);
+    if (page.length < RANKING_PAGE_SIZE) break;
+    offset += RANKING_PAGE_SIZE;
+  }
+
+  return rows;
 }
 
 /** Lee predicciones de todos los miembros de una liga (bypass RLS tras validar membresía). */
