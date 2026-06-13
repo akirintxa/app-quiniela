@@ -27,7 +27,6 @@ export default function ProfilePage() {
     bonusPoints: 0,
     predicted: 0,
     plenos: 0,
-    diferencias: 0,
     ganadores: 0,
     effectiveness: 0,
   });
@@ -143,7 +142,6 @@ export default function ProfilePage() {
           bonusPoints: favoriteBonus.total,
           predicted: matchStats.scoredPredictions,
           plenos: matchStats.plenos,
-          diferencias: matchStats.diferencias,
           ganadores: matchStats.ganadores,
           effectiveness: matchStats.effectiveness,
         });
@@ -265,7 +263,7 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <StatCard
             label="Puntos"
             value={String(stats.points)}
@@ -283,12 +281,6 @@ export default function ProfilePage() {
             accent="text-green-500"
           />
           <StatCard
-            label="Diferencias"
-            value={stats.diferencias}
-            suffix={`/ ${stats.predicted}`}
-            accent="text-yellow-500"
-          />
-          <StatCard
             label="Ganadores"
             value={stats.ganadores}
             suffix={`/ ${stats.predicted}`}
@@ -297,17 +289,15 @@ export default function ProfilePage() {
         </div>
 
         <p className="text-[10px] text-gray-400 dark:text-zinc-500 leading-relaxed px-1 -mt-1">
-          Cada partido puntuado entra en una sola categoría: pleno, diferencia o
-          ganador (en ese orden). La diferencia exige acertar el margen y el
-          resultado (no vale al revés, p. ej. 2-1 ≠ 0-1). Si acertaste ganador y
-          diferencia, cuenta como{" "}
-          <span className="font-bold text-yellow-600 dark:text-yellow-500">
-            diferencia
-          </span>
-          . Los aciertos solo de goles (+1A/+1B) suman puntos pero no aparecen
-          arriba.{" "}
-          <span className="font-bold">Efectividad</span> = % de partidos en los que
-          acertaste quién ganó o si hubo empate (90&apos;).
+          <span className="font-bold text-green-600 dark:text-green-500">Plenos</span>{" "}
+          = marcador exacto.{" "}
+          <span className="font-bold text-orange-600 dark:text-orange-500">
+            Ganadores
+          </span>{" "}
+          = acertaste quién ganó o si hubo empate (90&apos;). Un pleno también
+          cuenta como ganador.{" "}
+          <span className="font-bold">Efectividad</span> = ganadores ÷ partidos
+          jugados.
         </p>
 
         <div className="bg-blue-600 p-5 rounded-3xl text-white shadow-xl shadow-blue-500/20 flex justify-between px-4">
@@ -316,6 +306,9 @@ export default function ProfilePage() {
               Efectividad
             </span>
             <div className="text-2xl font-black">{stats.effectiveness}%</div>
+            <p className="text-[9px] font-bold opacity-70 mt-1">
+              {stats.ganadores} / {stats.predicted} ganadores
+            </p>
           </div>
           <div className="text-right">
             <span className="text-[8px] font-black uppercase tracking-widest opacity-80">
