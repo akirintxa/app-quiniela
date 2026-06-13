@@ -179,7 +179,7 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
     const p = predictions.find((pr) => pr.match_id === m.id);
     const pts = p?.points_won ?? 0;
     cumulative += pts;
-    const breakdown =
+    const breakdownRaw =
       p && m.result_a != null
         ? formatPointsBreakdown(
             getPointsBreakdown(
@@ -189,6 +189,7 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
             )
           )
         : "";
+    const breakdown = breakdownRaw === "0" ? "" : breakdownRaw;
 
     const resolved = knockoutLabels.get(m.id);
     const isPenaltyDecision =

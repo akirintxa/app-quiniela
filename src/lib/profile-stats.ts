@@ -1,4 +1,8 @@
-import { getPointsBreakdown, type PredictionForScoring } from "@/lib/points";
+import {
+  getPointsBreakdown,
+  isCorrectMatchOutcome,
+  type PredictionForScoring,
+} from "@/lib/points";
 import type { Match } from "@/types";
 
 export type ProfileStatsFromPredictions = {
@@ -51,11 +55,10 @@ export function aggregateProfileStats(
   let plenos = 0;
   let diferencias = 0;
   let ganadores = 0;
-  let withPoints = 0;
+  let correctOutcomes = 0;
 
   for (const p of predictions) {
     matchPoints += p.points_won ?? 0;
-    if ((p.points_won ?? 0) > 0) withPoints++;
 
     const m = matchFromPrediction(p);
     if (
@@ -76,6 +79,17 @@ export function aggregateProfileStats(
 
     const breakdown = getPointsBreakdown(pred, m as Match);
 
+    if (
+      isCorrectMatchOutcome(
+        p.predicted_a,
+        p.predicted_b,
+        m.result_a,
+        m.result_b
+      )
+    ) {
+      correctOutcomes++;
+    }
+
     if (p.predicted_a === m.result_a && p.predicted_b === m.result_b) {
       plenos++;
     } else if (breakdown.difference > 0) {
@@ -95,7 +109,7 @@ export function aggregateProfileStats(
     ganadores,
     effectiveness:
       scoredPredictions > 0
-        ? Math.round((withPoints / scoredPredictions) * 100)
+        ? Math.round((correctOutcomes / scoredPredictions) * 100)
         : 0,
   };
 }

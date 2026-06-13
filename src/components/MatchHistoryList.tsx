@@ -49,19 +49,21 @@ export default function MatchHistoryList({ rows }: { rows: MatchHistoryRow[] }) 
               </span>
             )}
           </div>
-          <div className="text-right shrink-0 ml-3">
-            <div className="font-black text-lg tracking-tighter leading-none">
-              {h.total}{" "}
-              <span className="text-[10px] text-gray-400">PTS</span>
-            </div>
+          <div className="text-right shrink-0 ml-3 flex flex-col items-end gap-1">
             <span
-              className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+              className={`text-lg font-black tracking-tighter leading-none ${
                 h.pts > 0
-                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                  : "bg-gray-100 text-gray-400 dark:bg-zinc-800"
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-gray-400"
               }`}
             >
-              +{h.pts}
+              {h.pts > 0 ? `+${h.pts}` : "0"}
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">
+              partido
+            </span>
+            <span className="text-[9px] font-bold text-gray-500 dark:text-zinc-400 tabular-nums">
+              acum. {h.total}
             </span>
           </div>
         </div>

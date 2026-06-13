@@ -68,7 +68,13 @@ export function knockoutResolvedFromMatch(
   };
 }
 
-function isCorrectRegulationOutcome(pA: number, pB: number, rA: number, rB: number): boolean {
+/** Acierto de resultado en 90' (victoria local, visitante o empate). Misma regla que +2G. */
+export function isCorrectMatchOutcome(
+  pA: number,
+  pB: number,
+  rA: number,
+  rB: number
+): boolean {
   const predictedDiff = pA - pB;
   const actualDiff = rA - rB;
   return (
@@ -132,7 +138,7 @@ export function getPointsBreakdown(
     ? resolved ?? knockoutResolvedFromMatch(match)
     : null;
 
-  const winner = isCorrectRegulationOutcome(pA, pB, rA, rB) ? 2 : 0;
+  const winner = isCorrectMatchOutcome(pA, pB, rA, rB) ? 2 : 0;
   const difference = pA - pB === rA - rB ? 1 : 0;
   const goalsA = pA === rA ? 1 : 0;
   const goalsB = pB === rB ? 1 : 0;

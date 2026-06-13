@@ -306,8 +306,8 @@ export default function ProfilePage() {
           </span>
           . Los aciertos solo de goles (+1A/+1B) suman puntos pero no aparecen
           arriba.{" "}
-          <span className="font-bold">Efectividad</span> = partidos con al menos 1
-          punto.
+          <span className="font-bold">Efectividad</span> = % de partidos en los que
+          acertaste quién ganó o si hubo empate (90&apos;).
         </p>
 
         <div className="bg-blue-600 p-5 rounded-3xl text-white shadow-xl shadow-blue-500/20 flex justify-between px-4">
