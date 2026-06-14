@@ -128,48 +128,27 @@ export function calculateFavoriteTeamBonuses(
   const awards: FavoriteBonusAward[] = [];
   if (!favoriteTeamId) return { total: 0, awards: [] };
 
-  const teamId = favoriteTeamId;
-  const finishedKnockout = options.knockoutMatches.filter(
-    (m) => m.result_a !== null && m.result_b !== null
-  );
-
   const resolvedKoById = buildResolvedKnockoutMap(
     options.groupMatches,
     options.knockoutMatches,
     options.allTeams
   );
 
-  const rule = (key: FavoriteBonusKey) =>
-    FAVORITE_BONUS_RULES.find((r) => r.key === key)!;
+  const bonusContext = {
+    ...options,
+    resolvedKnockoutById: resolvedKoById,
+  };
 
-  if (teamQualifiedToRoundOf16(teamId, options.groupMatches)) {
-    const r = rule("to_round_16");
-    awards.push({ key: r.key, points: r.points, label: r.label });
-  }
+  for (const phase of HISTORY_BONUS_PHASES) {
+    const pts = getFavoriteBonusPointsForHistoryPhase(
+      favoriteTeamId,
+      phase,
+      bonusContext
+    );
+    if (pts === null || pts === 0) continue;
 
-  if (teamWonStage(teamId, "round_32", finishedKnockout, resolvedKoById)) {
-    const r = rule("to_round_8");
-    awards.push({ key: r.key, points: r.points, label: r.label });
-  }
-
-  if (teamWonStage(teamId, "round_16", finishedKnockout, resolvedKoById)) {
-    const r = rule("to_quarter");
-    awards.push({ key: r.key, points: r.points, label: r.label });
-  }
-
-  if (teamWonStage(teamId, "quarter_final", finishedKnockout, resolvedKoById)) {
-    const r = rule("to_semi");
-    awards.push({ key: r.key, points: r.points, label: r.label });
-  }
-
-  if (teamWonStage(teamId, "semi_final", finishedKnockout, resolvedKoById)) {
-    const r = rule("to_final");
-    awards.push({ key: r.key, points: r.points, label: r.label });
-  }
-
-  if (teamWonStage(teamId, "final", finishedKnockout, resolvedKoById)) {
-    const r = rule("final_winner");
-    awards.push({ key: r.key, points: r.points, label: r.label });
+    const rule = FAVORITE_BONUS_RULES.find((r) => r.key === phase.bonusKey)!;
+    awards.push({ key: rule.key, points: pts, label: rule.label });
   }
 
   const total = awards.reduce((sum, a) => sum + a.points, 0);
