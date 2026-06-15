@@ -231,51 +231,6 @@ export async function finalizeMatchSync(
   }
 }
 
-export type ExternalMatchStatus = "scheduled" | "live" | "finished";
-
-export async function applyMatchStateSync(
-  supabase: ServiceSupabase,
-  matchId: number,
-  params: {
-    status: ExternalMatchStatus;
-    resultA: number;
-    resultB: number;
-    winnerId?: number | null;
-  }
-): Promise<MatchSyncResult & { action?: string }> {
-  const { status, resultA, resultB, winnerId = null } = params;
-
-  if (status === "scheduled") {
-    return { ok: true, skipped: true, action: "scheduled" };
-  }
-
-  if (status === "live") {
-    const existing = await loadMatchRow(supabase, matchId);
-    if (!existing.is_locked) {
-      const started = await startMatchSync(supabase, matchId);
-      if (!started.ok) return started;
-    }
-    const updated = await updateLiveScoreSync(
-      supabase,
-      matchId,
-      resultA,
-      resultB,
-      winnerId
-    );
-    return { ...updated, action: "live" };
-  }
-
-  const finalized = await finalizeMatchSync(
-    supabase,
-    matchId,
-    resultA,
-    resultB,
-    winnerId
-  );
-  return { ...finalized, action: "finished" };
-}
-
-
 export type ScheduledMatchLockResult = {
   ok: boolean;
   locked: number;

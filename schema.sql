@@ -29,8 +29,8 @@ CREATE TABLE matches (
     is_finished BOOLEAN DEFAULT false, -- Indica si el partido terminó y se han calculado los puntos
     bracket_round SMALLINT, -- Orden visual en el árbol (0 = dieciseisavos)
     bracket_index SMALLINT, -- Índice dentro de la ronda
-    external_fixture_id TEXT UNIQUE, -- ID en API-Football (api-sports.io)
-    last_synced_at TIMESTAMPTZ -- Última sincronización automática
+    external_fixture_id TEXT UNIQUE, -- legacy (opcional)
+    last_synced_at TIMESTAMPTZ -- Última actualización de estado del partido
 );
 
 -- 4. Tabla de predicciones de los usuarios

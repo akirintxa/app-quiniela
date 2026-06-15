@@ -37,42 +37,21 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 Respuesta esperada: `{ "ok": true, "locked": N, "started": M, "errors": [] }`.
 
-## Sincronización automática de resultados (opcional)
-
-Marcadores vía [API-Football](https://www.api-football.com/) (`api-sports.io`).
-
-- Lógica: [`src/lib/fifa-sync.ts`](src/lib/fifa-sync.ts) → mismas reglas que `/admin` ([`src/lib/match-sync.ts`](src/lib/match-sync.ts)).
-- Endpoint: `GET /api/cron/sync-matches` (protegido con `CRON_SECRET`).
-- Horario activo del sync: ~11:00–02:00 hora de Caracas, jun–jul 2026 (ahorra cuota API free).
-- La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
+**Marcadores:** solo desde [`/admin`](src/app/admin/page.tsx). La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
 
 **No usa cron de Supabase.** Los jobs llaman a tu app en Vercel; Supabase solo es la base de datos.
 
-**Vercel Hobby** no permite cron frecuente (solo 1×/día). Usa un servicio externo gratuito o `/admin` manual.
-
 ### cron-job.org (gratis, recomendado)
 
-Crea **dos** tareas en [cron-job.org](https://cron-job.org):
+Crea **una** tarea en [cron-job.org](https://cron-job.org):
 
 | Tarea | URL | Frecuencia | Header |
 |-------|-----|------------|--------|
 | Cerrar partidos | `https://www.losqq.com/api/cron/lock-matches` | Cada **5–10 min** (todo el Mundial) | `Authorization: Bearer TU_CRON_SECRET` |
-| Sync marcadores | `https://www.losqq.com/api/cron/sync-matches` | Cada **3 min** (solo jun–jul, horario de partidos) | Igual |
 
-En cron-job.org: **Advanced** → **Headers** → nombre `Authorization`, valor `Bearer TU_CRON_SECRET` (sustituye el secreto real, el mismo que `CRON_SECRET` en Vercel).
+En cron-job.org: **Advanced** → **Headers** → nombre `Authorization`, valor `Bearer TU_CRON_SECRET` (el mismo que `CRON_SECRET` en Vercel).
 
-Alternativas: **Vercel Pro** con `vercel.json`, o **`/admin` manual** como respaldo.
-
-**Fallback manual:** penales sin mapear o API caída → `/admin`.
-
-**Supabase (una vez):** [`matches_external_fixture.sql`](matches_external_fixture.sql).
-
-**Prueba sync API:**
-
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.losqq.com/api/cron/sync-matches?force=1"
-```
+Alternativa: **Vercel Pro** con `vercel.json`, o confiar solo en el bloqueo por horario en UI/servidor (sin actualizar `is_locked` en BD automáticamente).
 
 ## Variables de entorno
 
@@ -84,9 +63,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ADMIN_EMAIL=tu@email.com,otro@email.com
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-API_FOOTBALL_KEY=tu_clave_api_sports
-API_FOOTBALL_LEAGUE_ID=1
-API_FOOTBALL_SEASON=2026
 CRON_SECRET=secreto_largo_aleatorio
 ```
 
