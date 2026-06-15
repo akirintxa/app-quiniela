@@ -24,6 +24,7 @@ import {
   getMatchIdsToInvalidateOnGroupChange,
   getMatchIdsToInvalidateOnKnockoutChange,
 } from '@/lib/knockout-invalidation';
+import { isMatchClosedForPredictions } from '@/lib/prediction';
 import { Match, Prediction } from '@/types';
 import { GroupId } from '@/types/knockout';
 import {
@@ -92,7 +93,7 @@ export async function savePrediction(matchId: number, scoreA: number, scoreB: nu
     .single();
   if (!match) throw new Error('Partido no encontrado');
   
-  if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
+  if (isMatchClosedForPredictions(match)) {
     throw new Error('Cerrado');
   }
 
@@ -157,7 +158,7 @@ export async function saveStagePredictions(items: StagePredictionInput[]) {
   for (const item of items) {
     const match = matchMap.get(item.matchId);
     if (!match) continue;
-    if (match.is_finished || (match.is_locked && new Date() > new Date(match.start_time))) {
+    if (isMatchClosedForPredictions(match)) {
       continue;
     }
 
@@ -237,11 +238,12 @@ export async function randomizeGroupPredictions(groupId: string) {
     .eq('is_finished', false)
     .eq('is_locked', false);
 
-  if (!matches || matches.length === 0) return;
+  const openMatches = (matches ?? []).filter((m) => !isMatchClosedForPredictions(m));
+  if (openMatches.length === 0) return;
 
   await supabase
     .from('predictions')
-    .upsert(buildRandomPredictions(user.id, matches), { onConflict: 'user_id,match_id' });
+    .upsert(buildRandomPredictions(user.id, openMatches), { onConflict: 'user_id,match_id' });
 
   const toClear = getMatchIdsToInvalidateOnGroupChange(groupId as GroupId);
   await invalidateKnockoutPredictions(supabase, user.id, toClear);
@@ -263,11 +265,12 @@ export async function randomizeAllGroupPredictions() {
     .eq('is_finished', false)
     .eq('is_locked', false);
 
-  if (!matches || matches.length === 0) return;
+  const openMatches = (matches ?? []).filter((m) => !isMatchClosedForPredictions(m));
+  if (openMatches.length === 0) return;
 
   await supabase
     .from('predictions')
-    .upsert(buildRandomPredictions(user.id, matches), { onConflict: 'user_id,match_id' });
+    .upsert(buildRandomPredictions(user.id, openMatches), { onConflict: 'user_id,match_id' });
 
   await invalidateKnockoutPredictions(supabase, user.id, KNOCKOUT_MATCH_IDS);
 
@@ -288,9 +291,10 @@ export async function randomizeKnockoutPredictions(stage: string) {
     .eq('is_finished', false)
     .eq('is_locked', false);
 
-  if (!matches || matches.length === 0) return;
+  const openMatches = (matches ?? []).filter((m) => !isMatchClosedForPredictions(m));
+  if (openMatches.length === 0) return;
 
-  const predictions = matches.map(match => {
+  const predictions = openMatches.map(match => {
     const scoreA = Math.floor(Math.random() * 4);
     const scoreB = Math.floor(Math.random() * 4);
     let winnerId = null;

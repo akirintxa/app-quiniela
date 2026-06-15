@@ -89,7 +89,7 @@ async function loadSyncCandidateMatches(
   supabase: SupabaseClient
 ): Promise<MatchWithTeams[]> {
   const now = Date.now();
-  const windowStart = new Date(now - 15 * 60 * 1000).toISOString();
+  const windowStart = new Date(now - 30 * 60 * 1000).toISOString();
   const windowEnd = new Date(now + 3 * 60 * 60 * 1000).toISOString();
 
   const [liveRes, windowRes] = await Promise.all([

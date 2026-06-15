@@ -18,7 +18,26 @@ Stack principal:
 - Ranking de jugadores y ranking de ligas.
 - Panel `/admin` protegido por variable de entorno (`ADMIN_EMAIL`).
 
-## Sincronización automática de resultados
+## Cierre automático de predicciones (T-30)
+
+Las predicciones se cierran **30 minutos antes** del kickoff (`start_time`). La regla está en [`src/lib/prediction.ts`](src/lib/prediction.ts) y se aplica en UI y servidor.
+
+- **T-30:** `is_locked = true` en BD (sin marcador). Los usuarios dejan de editar.
+- **Kickoff:** marcador `0-0` y estado en vivo (si el cron corre a tiempo).
+- **`/admin`:** siempre puedes iniciar, actualizar y finalizar partidos a mano (no usa el bloqueo de usuarios).
+
+Endpoint: `GET /api/cron/lock-matches` (protegido con `CRON_SECRET`).
+
+**Prueba local o producción:**
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://www.losqq.com/api/cron/lock-matches"
+```
+
+Respuesta esperada: `{ "ok": true, "locked": N, "started": M, "errors": [] }`.
+
+## Sincronización automática de resultados (opcional)
 
 Marcadores vía [API-Football](https://www.api-football.com/) (`api-sports.io`).
 
@@ -27,17 +46,28 @@ Marcadores vía [API-Football](https://www.api-football.com/) (`api-sports.io`).
 - Horario activo del sync: ~11:00–02:00 hora de Caracas, jun–jul 2026 (ahorra cuota API free).
 - La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
 
-**Vercel Hobby** no permite cron cada 3 min (solo 1×/día). Opciones:
+**No usa cron de Supabase.** Los jobs llaman a tu app en Vercel; Supabase solo es la base de datos.
 
-1. **cron-job.org** (gratis): job cada 3 min → `GET https://www.losqq.com/api/cron/sync-matches` con header `Authorization: Bearer TU_CRON_SECRET`.
-2. **Vercel Pro**: puedes volver a añadir `vercel.json` con `*/3 * * * *`.
-3. **`/admin` manual** siempre disponible como respaldo.
+**Vercel Hobby** no permite cron frecuente (solo 1×/día). Usa un servicio externo gratuito o `/admin` manual.
+
+### cron-job.org (gratis, recomendado)
+
+Crea **dos** tareas en [cron-job.org](https://cron-job.org):
+
+| Tarea | URL | Frecuencia | Header |
+|-------|-----|------------|--------|
+| Cerrar partidos | `https://www.losqq.com/api/cron/lock-matches` | Cada **5–10 min** (todo el Mundial) | `Authorization: Bearer TU_CRON_SECRET` |
+| Sync marcadores | `https://www.losqq.com/api/cron/sync-matches` | Cada **3 min** (solo jun–jul, horario de partidos) | Igual |
+
+En cron-job.org: **Advanced** → **Headers** → nombre `Authorization`, valor `Bearer TU_CRON_SECRET` (sustituye el secreto real, el mismo que `CRON_SECRET` en Vercel).
+
+Alternativas: **Vercel Pro** con `vercel.json`, o **`/admin` manual** como respaldo.
 
 **Fallback manual:** penales sin mapear o API caída → `/admin`.
 
 **Supabase (una vez):** [`matches_external_fixture.sql`](matches_external_fixture.sql).
 
-**Prueba:**
+**Prueba sync API:**
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" \

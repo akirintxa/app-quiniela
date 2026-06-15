@@ -3,6 +3,7 @@ import { resolveKnockoutWinnerId } from "@/lib/match-admin";
 import { calculatePoints, isKnockoutStage } from "@/lib/points";
 import { loadResolvedKnockoutMatch } from "@/lib/knockout-points-context";
 import type { Match, Prediction } from "@/types";
+import { PREDICTION_LOCK_MINUTES_BEFORE } from "@/lib/prediction";
 
 export type MatchSyncResult =
   | { ok: true; skipped?: boolean }
@@ -97,10 +98,10 @@ export async function startMatchSync(
 ): Promise<MatchSyncResult> {
   try {
     const existing = await loadMatchRow(supabase, matchId);
-    if (existing.is_locked && !existing.is_finished) {
+    if (existing.is_finished) {
       return { ok: true, skipped: true };
     }
-    if (existing.is_finished) {
+    if (existing.result_a !== null && existing.result_b !== null) {
       return { ok: true, skipped: true };
     }
 
@@ -272,4 +273,102 @@ export async function applyMatchStateSync(
     winnerId
   );
   return { ...finalized, action: "finished" };
+}
+
+
+export type ScheduledMatchLockResult = {
+  ok: boolean;
+  locked: number;
+  started: number;
+  errors: string[];
+};
+
+/** Cierra predicciones (is_locked) T-30 sin marcador. */
+export async function lockUpcomingMatchesSync(
+  supabase: ServiceSupabase
+): Promise<{ locked: number; errors: string[] }> {
+  const lockDeadline = new Date(
+    Date.now() + PREDICTION_LOCK_MINUTES_BEFORE * 60 * 1000
+  ).toISOString();
+
+  const { data: matches, error } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("is_finished", false)
+    .eq("is_locked", false)
+    .is("result_a", null)
+    .is("result_b", null)
+    .lte("start_time", lockDeadline);
+
+  if (error) {
+    return { locked: 0, errors: [error.message] };
+  }
+
+  const errors: string[] = [];
+  let locked = 0;
+  const now = new Date().toISOString();
+
+  for (const row of matches ?? []) {
+    const { error: updateError } = await supabase
+      .from("matches")
+      .update({ is_locked: true, last_synced_at: now })
+      .eq("id", row.id);
+    if (updateError) {
+      errors.push(`Partido ${row.id}: ${updateError.message}`);
+    } else {
+      locked += 1;
+    }
+  }
+
+  return { locked, errors };
+}
+
+/** Inicia partidos al kickoff (0-0) si ya estaban cerrados sin marcador. */
+export async function startDueMatchesSync(
+  supabase: ServiceSupabase
+): Promise<{ started: number; errors: string[] }> {
+  const now = new Date().toISOString();
+
+  const { data: matches, error } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("is_finished", false)
+    .eq("is_locked", true)
+    .is("result_a", null)
+    .is("result_b", null)
+    .lte("start_time", now);
+
+  if (error) {
+    return { started: 0, errors: [error.message] };
+  }
+
+  const errors: string[] = [];
+  let started = 0;
+
+  for (const row of matches ?? []) {
+    const result = await startMatchSync(supabase, row.id);
+    if (!result.ok) {
+      errors.push(
+        `Partido ${row.id}: ${"error" in result ? result.error : "error desconocido"}`
+      );
+    } else if (!result.skipped) {
+      started += 1;
+    }
+  }
+
+  return { started, errors };
+}
+
+export async function runScheduledMatchLocksSync(
+  supabase: ServiceSupabase
+): Promise<ScheduledMatchLockResult> {
+  const lockResult = await lockUpcomingMatchesSync(supabase);
+  const startResult = await startDueMatchesSync(supabase);
+  const errors = [...lockResult.errors, ...startResult.errors];
+  return {
+    ok: errors.length === 0,
+    locked: lockResult.locked,
+    started: startResult.started,
+    errors,
+  };
 }

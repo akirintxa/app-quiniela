@@ -13,6 +13,7 @@ import {
   knockoutResolvedFromMatch,
 } from "@/lib/points";
 import { useAutoSavePrediction } from "@/hooks/useAutoSavePrediction";
+import { isMatchClosedForPredictions } from "@/lib/prediction";
 
 interface MatchCardProps {
   match: Match & {
@@ -150,10 +151,15 @@ export default function MatchCard({
   const hasData = effectiveScoreA !== "" && effectiveScoreB !== "";
 
   const startTime = new Date(match.start_time);
-  const isMatchStarted = new Date() > startTime;
+  const isKickoff = new Date() >= startTime;
   const isFinished = match.is_finished;
-  const isLive = match.is_locked && !isFinished;
-  const isLocked = match.is_locked || isMatchStarted || isFinished;
+  const isLocked = isMatchClosedForPredictions(match);
+  const isLive =
+    match.is_locked &&
+    !isFinished &&
+    isKickoff &&
+    match.result_a !== null &&
+    match.result_b !== null;
 
   // Indicacion para eliminatorias: si el marcador real fue empate y hubo definicion por penales.
   const matchIsDraw =

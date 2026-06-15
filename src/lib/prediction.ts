@@ -1,25 +1,37 @@
-
 import { Match } from "@/types";
 
-/**
- * Checks if a match's predictions are locked.
- *
- * @param match The match to check.
- * @returns True if predictions are locked, false otherwise.
- */
-export function isPredictionLocked(match: Match): boolean {
-  const now = new Date();
-  const startTime = new Date(match.start_time);
-  const lockTime = new Date(startTime.getTime() - 30 * 60 * 1000); // 30 minutes before start time
+export const PREDICTION_LOCK_MINUTES_BEFORE = 30;
 
-  return now > lockTime;
+export function getPredictionLockTime(startTimeIso: string): Date {
+  const start = new Date(startTimeIso);
+  return new Date(
+    start.getTime() - PREDICTION_LOCK_MINUTES_BEFORE * 60 * 1000
+  );
+}
+
+/**
+ * True when predictions should be closed (30 min before kickoff).
+ */
+export function isPredictionLocked(
+  match: Pick<Match, "start_time" | "is_finished">
+): boolean {
+  if (match.is_finished) return true;
+  return new Date() >= getPredictionLockTime(match.start_time);
+}
+
+/**
+ * Whether the user can still save predictions (server + UI).
+ */
+export function isMatchClosedForPredictions(
+  match: Pick<Match, "start_time" | "is_finished" | "is_locked">
+): boolean {
+  return (
+    match.is_finished || match.is_locked || isPredictionLocked(match)
+  );
 }
 
 /**
  * Generates a random prediction for a match.
- *
- * @param match The match to generate a prediction for.
- * @returns A random prediction.
  */
 export function generateRandomPrediction(match: Match) {
   const predicted_a = Math.floor(Math.random() * 5); // 0-4 goals
