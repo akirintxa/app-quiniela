@@ -312,16 +312,12 @@ export default async function GroupDetailPage({
     nickname: profileById.get(id)?.nickname || "Usuario",
   }));
 
-  const showLeagueAnalytics = process.env.NODE_ENV === "development";
-
-  const { data: finishedMatchesForAnalytics } = showLeagueAnalytics
-    ? await supabase
-        .from("matches")
-        .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
-        .not("result_a", "is", null)
-        .not("result_b", "is", null)
-        .order("start_time", { ascending: true })
-    : { data: [] as Match[] };
+  const { data: finishedMatchesForAnalytics } = await supabase
+    .from("matches")
+    .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+    .not("result_a", "is", null)
+    .not("result_b", "is", null)
+    .order("start_time", { ascending: true });
 
   const allMatchesForPhase = [
     ...((allGroupMatches ?? []) as Match[]),
@@ -556,24 +552,17 @@ export default async function GroupDetailPage({
           </div>
 
           <div className="lg:col-span-8 space-y-8">
-            {showLeagueAnalytics && (
-              <section className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-                  <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
-                    Estadísticas (vista previa local)
-                  </h2>
-                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">
-                    Solo visible en desarrollo
-                  </p>
-                </div>
-                <PoolAnalyticsPanel
-                  members={poolMembers}
-                  predictions={poolPredictions}
-                  finishedMatches={(finishedMatchesForAnalytics ?? []) as Match[]}
-                  currentUserId={user.id}
-                />
-              </section>
-            )}
+            <section className="space-y-4">
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
+                Estadísticas
+              </h2>
+              <PoolAnalyticsPanel
+                members={poolMembers}
+                predictions={poolPredictions}
+                finishedMatches={(finishedMatchesForAnalytics ?? []) as Match[]}
+                currentUserId={user.id}
+              />
+            </section>
 
             <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
               Próximos partidos
