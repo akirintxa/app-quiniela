@@ -12,6 +12,7 @@ import LeaveGroupButton from "@/components/LeaveGroupButton";
 import PoolAnalyticsPanel from "@/components/PoolAnalyticsPanel";
 import DeletePoolButton from "@/components/DeletePoolButton";
 import LeagueAdminPanel from "@/components/LeagueAdminPanel";
+import { buildMatchOutcomeSummary } from "@/lib/pool-outcome-summary";
 import {
   buildKnockoutHistoryLabels,
   buildMatchHistoryRows,
@@ -312,6 +313,17 @@ export default async function GroupDetailPage({
     nickname: profileById.get(id)?.nickname || "Usuario",
   }));
 
+  const leagueOutcomeByMatchId = new Map(
+    matches.map((match) => [
+      match.id,
+      buildMatchOutcomeSummary(
+        poolPredictions.filter((p) => p.match_id === match.id),
+        match,
+        memberIds.length
+      ),
+    ])
+  );
+
   const { data: finishedMatchesForAnalytics } = await supabase
     .from("matches")
     .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
@@ -580,6 +592,7 @@ export default async function GroupDetailPage({
                       initialPrediction={prediction}
                       poolId={poolId}
                       poolMembers={poolMembers}
+                      leagueOutcomeSummary={leagueOutcomeByMatchId.get(match.id)}
                       phaseCompleteByUser={phaseCompleteForMatch(match)}
                     />
                   );

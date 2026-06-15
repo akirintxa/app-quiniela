@@ -14,6 +14,8 @@ import {
 } from "@/lib/points";
 import { useAutoSavePrediction } from "@/hooks/useAutoSavePrediction";
 import { isMatchClosedForPredictions } from "@/lib/prediction";
+import type { MatchOutcomeSummary } from "@/lib/pool-outcome-summary";
+import MatchOutcomeSummaryBar from "@/components/MatchOutcomeSummary";
 
 interface MatchCardProps {
   match: Match & {
@@ -36,6 +38,7 @@ interface MatchCardProps {
   initialPrediction?: Prediction | null;
   poolId?: string;
   poolMembers?: { id: string; nickname: string }[];
+  leagueOutcomeSummary?: MatchOutcomeSummary;
   phaseCompleteByUser?: Record<string, boolean>;
   suppressSave?: boolean;
   controlledDraft?: {
@@ -56,6 +59,7 @@ export default function MatchCard({
   initialPrediction,
   poolId,
   poolMembers,
+  leagueOutcomeSummary,
   phaseCompleteByUser,
   suppressSave = false,
   controlledDraft,
@@ -649,6 +653,10 @@ export default function MatchCard({
               )}
             </button>
           </div>
+
+          {poolId && isLocked && leagueOutcomeSummary && (
+            <MatchOutcomeSummaryBar summary={leagueOutcomeSummary} />
+          )}
 
           {!suppressSave && (
           <div className="w-full flex gap-1.5 sm:gap-3">
