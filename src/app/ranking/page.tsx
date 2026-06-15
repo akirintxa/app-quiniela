@@ -4,7 +4,7 @@ import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import RankingTabsHandler from "@/components/RankingTabsHandler";
-import ShareRankingButton from "@/components/ShareRankingButton";
+import ShareStandingsButton from "@/components/ShareStandingsButton";
 import MemberBadge from "@/components/MemberBadge";
 import MatchHistoryList from "@/components/MatchHistoryList";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
@@ -323,7 +323,14 @@ export default async function RankingPage({
             </div>
             <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-gray-900 dark:text-white uppercase leading-none">RANKING <span className="text-blue-600">LIVE</span></h1>
           </div>
-          <ShareRankingButton poolName={selectedPoolName} />
+          <ShareStandingsButton
+            title={selectedPoolName ?? "Ranking global"}
+            rows={sortedRanking.map((m) => ({
+              rank: m.rank,
+              nickname: m.nickname,
+              points: m.points,
+            }))}
+          />
         </header>
 
         <div className="flex gap-4 mb-8 justify-center sm:justify-start">

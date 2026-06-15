@@ -4,10 +4,12 @@ import MatchCard from "@/components/MatchCard";
 import MatchHistoryList from "@/components/MatchHistoryList";
 import MemberBadge from "@/components/MemberBadge";
 import ScoringRulesButton from "@/components/ScoringRulesButton";
+import ShareStandingsButton from "@/components/ShareStandingsButton";
 import RealtimeRankingListener from "@/components/RealtimeRankingListener";
 import CopyInviteCode from "@/components/CopyInviteCode";
 import ShareLeagueQR from "@/components/ShareLeagueQR";
 import LeaveGroupButton from "@/components/LeaveGroupButton";
+import PoolAnalyticsPanel from "@/components/PoolAnalyticsPanel";
 import DeletePoolButton from "@/components/DeletePoolButton";
 import LeagueAdminPanel from "@/components/LeagueAdminPanel";
 import {
@@ -310,6 +312,17 @@ export default async function GroupDetailPage({
     nickname: profileById.get(id)?.nickname || "Usuario",
   }));
 
+  const showLeagueAnalytics = process.env.NODE_ENV === "development";
+
+  const { data: finishedMatchesForAnalytics } = showLeagueAnalytics
+    ? await supabase
+        .from("matches")
+        .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
+        .not("result_a", "is", null)
+        .not("result_b", "is", null)
+        .order("start_time", { ascending: true })
+    : { data: [] as Match[] };
+
   const allMatchesForPhase = [
     ...((allGroupMatches ?? []) as Match[]),
     ...((allKnockoutMatches ?? []) as Match[]),
@@ -468,6 +481,15 @@ export default async function GroupDetailPage({
                 <span className="flex items-center gap-2 shrink-0">
                   Ranking
                   <ScoringRulesButton size="sm" />
+                  <ShareStandingsButton
+                    title={pool.name}
+                    rows={sortedRanking.map((m) => ({
+                      rank: m.rank,
+                      nickname: m.nickname,
+                      points: m.points,
+                    }))}
+                    compact
+                  />
                 </span>
                 <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900" />
               </h2>
@@ -534,6 +556,25 @@ export default async function GroupDetailPage({
           </div>
 
           <div className="lg:col-span-8 space-y-8">
+            {showLeagueAnalytics && (
+              <section className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+                  <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
+                    Estadísticas (vista previa local)
+                  </h2>
+                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                    Solo visible en desarrollo
+                  </p>
+                </div>
+                <PoolAnalyticsPanel
+                  members={poolMembers}
+                  predictions={poolPredictions}
+                  finishedMatches={(finishedMatchesForAnalytics ?? []) as Match[]}
+                  currentUserId={user.id}
+                />
+              </section>
+            )}
+
             <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400">
               Próximos partidos
             </h2>
