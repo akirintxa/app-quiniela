@@ -484,8 +484,8 @@ export default async function GroupDetailPage({
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-4 space-y-8">
-            <div className="sticky top-24">
-              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-2 flex items-center gap-3">
+            <div className="lg:sticky lg:top-24 lg:self-start flex flex-col lg:max-h-[calc(100vh-7rem)]">
+              <h2 className="text-xs font-black uppercase tracking-[0.3em] text-gray-400 mb-2 flex items-center gap-3 shrink-0">
                 <span className="flex items-center gap-2 shrink-0">
                   Ranking
                   <ScoringRulesButton size="sm" />
@@ -501,7 +501,7 @@ export default async function GroupDetailPage({
                 </span>
                 <div className="h-px flex-1 bg-gray-100 dark:bg-zinc-900" />
               </h2>
-              <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden">
+              <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-zinc-800 overflow-hidden lg:overflow-y-auto lg:min-h-0">
                 <table className="w-full text-left border-collapse">
                   <tbody className="divide-y divide-gray-50 dark:divide-zinc-800">
                     {sortedRanking.map((member) => (
