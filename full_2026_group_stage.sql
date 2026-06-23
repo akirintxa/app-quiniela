@@ -142,7 +142,7 @@ BEGIN
     ((SELECT id FROM teams WHERE name LIKE 'Inglaterra%'), (SELECT id FROM teams WHERE name LIKE 'Croacia%'), 'L', 'group', '2026-06-17 20:00:00+00'),
     ((SELECT id FROM teams WHERE name LIKE 'Panamá%'), (SELECT id FROM teams WHERE name LIKE 'Ghana%'), 'L', 'group', '2026-06-17 23:00:00+00'),
     ((SELECT id FROM teams WHERE name LIKE 'Inglaterra%'), (SELECT id FROM teams WHERE name LIKE 'Ghana%'), 'L', 'group', '2026-06-23 20:00:00+00'),
-    ((SELECT id FROM teams WHERE name LIKE 'Croacia%'), (SELECT id FROM teams WHERE name LIKE 'Panamá%'), 'L', 'group', '2026-06-24 23:00:00+00'),
+    ((SELECT id FROM teams WHERE name LIKE 'Croacia%'), (SELECT id FROM teams WHERE name LIKE 'Panamá%'), 'L', 'group', '2026-06-23 23:00:00+00'),
     ((SELECT id FROM teams WHERE name LIKE 'Inglaterra%'), (SELECT id FROM teams WHERE name LIKE 'Panamá%'), 'L', 'group', '2026-06-27 21:00:00+00'),
     ((SELECT id FROM teams WHERE name LIKE 'Ghana%'), (SELECT id FROM teams WHERE name LIKE 'Croacia%'), 'L', 'group', '2026-06-27 21:00:00+00');
 END $$;

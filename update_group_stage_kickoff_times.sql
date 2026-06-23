@@ -85,7 +85,7 @@ WITH kickoffs (team_a_like, team_b_like, start_time) AS (
     ('Inglaterra%', 'Croacia%', '2026-06-17 20:00:00+00'::timestamptz),
     ('Panamá%', 'Ghana%', '2026-06-17 23:00:00+00'::timestamptz),
     ('Inglaterra%', 'Ghana%', '2026-06-23 20:00:00+00'::timestamptz),
-    ('Croacia%', 'Panamá%', '2026-06-24 23:00:00+00'::timestamptz),
+    ('Croacia%', 'Panamá%', '2026-06-23 23:00:00+00'::timestamptz),
     ('Inglaterra%', 'Panamá%', '2026-06-27 21:00:00+00'::timestamptz),
     ('Ghana%', 'Croacia%', '2026-06-27 21:00:00+00'::timestamptz)
 )
