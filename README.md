@@ -37,17 +37,27 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 Respuesta esperada: `{ "ok": true, "locked": N, "started": M, "errors": [] }`.
 
-**Marcadores:** solo desde [`/admin`](src/app/admin/page.tsx). La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
+**Sync automático de marcadores** (opcional, `AUTO_SCORE_SYNC=true`):
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  "https://www.losqq.com/api/cron/sync-scores"
+```
+
+Respuesta esperada de sync: `{ "ok": true, "started": N, "updated": N, "finalized": N, "penaltiesPending": N, "skipped": N, "errors": [] }`.
+
+**Marcadores:** por defecto desde [`/admin`](src/app/admin/page.tsx) (plan B manual). Con `AUTO_SCORE_SYNC=true`, el cron `/api/cron/sync-scores` importa marcadores de [worldcup26.ir](https://worldcup26.ir/get/games) (IDs 1–104). Los empates en eliminatorias **no se finalizan** automáticamente: hay que indicar quién pasa en `/admin`. La app propaga cambios con Supabase Realtime ([`RealtimeRankingListener`](src/components/RealtimeRankingListener.tsx)).
 
 **No usa cron de Supabase.** Los jobs llaman a tu app en Vercel; Supabase solo es la base de datos.
 
 ### cron-job.org (gratis, recomendado)
 
-Crea **una** tarea en [cron-job.org](https://cron-job.org):
+Crea tareas en [cron-job.org](https://cron-job.org):
 
 | Tarea | URL | Frecuencia | Header |
 |-------|-----|------------|--------|
 | Cerrar partidos | `https://www.losqq.com/api/cron/lock-matches` | Cada **5–10 min** (todo el Mundial) | `Authorization: Bearer TU_CRON_SECRET` |
+| Sync marcadores | `https://www.losqq.com/api/cron/sync-scores` | Cada **2–3 min** (solo si `AUTO_SCORE_SYNC=true`) | `Authorization: Bearer TU_CRON_SECRET` |
 
 En cron-job.org: **Advanced** → **Headers** → nombre `Authorization`, valor `Bearer TU_CRON_SECRET` (el mismo que `CRON_SECRET` en Vercel).
 
@@ -64,12 +74,14 @@ SUPABASE_SERVICE_ROLE_KEY=...
 ADMIN_EMAIL=tu@email.com,otro@email.com
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 CRON_SECRET=secreto_largo_aleatorio
+AUTO_SCORE_SYNC=false
 ```
 
 Notas:
 
 - `ADMIN_EMAIL` controla quien puede acceder a `/admin`.
 - `SUPABASE_SERVICE_ROLE_KEY` es solo servidor (nunca exponer en cliente).
+- `AUTO_SCORE_SYNC=true` activa `/api/cron/sync-scores` (marcadores desde worldcup26.ir).
 - En produccion, `NEXT_PUBLIC_SITE_URL` debe ser el dominio real (por ejemplo `https://losqq.com`).
 
 ## Arranque local
