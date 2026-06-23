@@ -355,7 +355,7 @@ export default function ProfilePage() {
             </label>
             <select
               id="favorite_team_id"
-              name="favorite_team_id"
+              name={favoriteTeamLocked ? undefined : "favorite_team_id"}
               value={selectedTeamId}
               onChange={(e) => setSelectedTeamId(e.target.value)}
               disabled={favoriteTeamLocked}
@@ -370,6 +370,9 @@ export default function ProfilePage() {
                 </option>
               ))}
             </select>
+            {favoriteTeamLocked && (
+              <input type="hidden" name="favorite_team_id" value={selectedTeamId} />
+            )}
           </div>
 
           <button

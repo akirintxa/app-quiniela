@@ -518,23 +518,31 @@ export async function updateProfile(formData: FormData) {
   
   if (!user) return { error: 'No autorizado' };
 
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('favorite_team_id')
+    .eq('id', user.id)
+    .maybeSingle();
+
   const favoriteTeamLocked = await isFavoriteTeamChangeLocked(supabase);
+  const existingTeamId = existingProfile?.favorite_team_id ?? null;
+  const submittedTeamId = favoriteTeamId ? Number(favoriteTeamId) : null;
+
+  let teamId: number | null;
   if (favoriteTeamLocked) {
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('favorite_team_id')
-      .eq('id', user.id)
-      .single();
-    const newTeamId = favoriteTeamId ? Number(favoriteTeamId) : null;
     if (
-      existingProfile?.favorite_team_id != null &&
-      existingProfile.favorite_team_id !== newTeamId
+      submittedTeamId != null &&
+      existingTeamId != null &&
+      submittedTeamId !== existingTeamId
     ) {
       return {
         error:
           'El equipo favorito no se puede cambiar: todos los equipos ya jugaron al menos un partido',
       };
     }
+    teamId = existingTeamId;
+  } else {
+    teamId = submittedTeamId;
   }
 
   const { error: authError } = await supabase.auth.updateUser({
@@ -543,7 +551,6 @@ export async function updateProfile(formData: FormData) {
 
   if (authError) return { error: 'Error al actualizar metadatos' };
 
-  const teamId = favoriteTeamId ? Number(favoriteTeamId) : null;
   const profilePayload = {
     nickname,
     favorite_team_id: teamId,
