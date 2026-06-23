@@ -135,99 +135,114 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
   const scoreInputsDisabled = loading || status === "scheduled";
   const pasaDisabled = loading || status === "scheduled";
 
+  const scoreInputClass =
+    "w-9 h-9 sm:w-12 sm:h-12 lg:w-14 lg:h-14 text-center text-base sm:text-lg lg:text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg sm:rounded-xl disabled:opacity-50";
+
+  const actionBtnClass =
+    "px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl font-black text-[9px] sm:text-[10px] uppercase tracking-widest disabled:opacity-50";
+
   return (
     <div
-      className={`p-6 flex flex-col gap-4 border-b border-gray-50 dark:border-zinc-800 last:border-0 ${
+      className={`p-4 sm:p-6 flex flex-col gap-3 sm:gap-4 border-b border-gray-50 dark:border-zinc-800 last:border-0 ${
         status === "live" ? "bg-green-50/30 dark:bg-green-950/10" : ""
       } ${status === "finished" ? "bg-blue-50/20 dark:bg-blue-900/5" : ""}`}
     >
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
-        <div className="flex flex-wrap items-center gap-4 min-w-0">
-          {isKnockout && (
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-6">
+        <div className="flex flex-col gap-2 sm:gap-3 min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {isKnockout && (
+              <span
+                className="shrink-0 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black tabular-nums tracking-tight bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600"
+                title="Número de partido (fixture eliminatorias)"
+              >
+                Partido {match.id}
+              </span>
+            )}
             <span
-              className="shrink-0 px-2.5 py-1 rounded-lg text-[9px] font-black tabular-nums tracking-tight bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600"
-              title="Número de partido (fixture eliminatorias)"
+              className={`shrink-0 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-widest ${statusClass}`}
             >
-              Partido {match.id}
+              {statusLabel}
             </span>
-          )}
-          <span
-            className={`shrink-0 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${statusClass}`}
-          >
-            {statusLabel}
-          </span>
-          <span className="font-black text-xs uppercase truncate max-w-[7rem] sm:max-w-none text-right sm:text-right">
-            {match.team_a?.name}
-          </span>
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col items-center">
-              <input
-                type="number"
-                min={0}
-                value={resultA}
-                onChange={(e) =>
-                  setResultA(e.target.value === "" ? "" : Number(e.target.value))
-                }
-                disabled={scoreInputsDisabled}
-                placeholder="–"
-                className="w-14 h-14 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl disabled:opacity-50"
-              />
-              {isKnockout && isDraw && status !== "scheduled" && (
-                <button
-                  type="button"
-                  onClick={() => setWinnerId(match.team_a_id)}
-                  disabled={pasaDisabled}
-                  className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${
-                    winnerId === match.team_a_id
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white dark:bg-zinc-800 text-gray-400 border-gray-200"
-                  }`}
-                >
-                  Pasa
-                </button>
-              )}
-            </div>
-            <span className="font-black text-gray-300 text-lg">:</span>
-            <div className="flex flex-col items-center">
-              <input
-                type="number"
-                min={0}
-                value={resultB}
-                onChange={(e) =>
-                  setResultB(e.target.value === "" ? "" : Number(e.target.value))
-                }
-                disabled={scoreInputsDisabled}
-                placeholder="–"
-                className="w-14 h-14 text-center text-xl font-black bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl disabled:opacity-50"
-              />
-              {isKnockout && isDraw && status !== "scheduled" && (
-                <button
-                  type="button"
-                  onClick={() => setWinnerId(match.team_b_id)}
-                  disabled={pasaDisabled}
-                  className={`mt-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${
-                    winnerId === match.team_b_id
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white dark:bg-zinc-800 text-gray-400 border-gray-200"
-                  }`}
-                >
-                  Pasa
-                </button>
-              )}
-            </div>
           </div>
-          <span className="font-black text-xs uppercase truncate max-w-[7rem] sm:max-w-none">
-            {match.team_b?.name}
-          </span>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:gap-x-3">
+            <span className="font-black text-[9px] sm:text-xs uppercase truncate text-right leading-tight">
+              {match.team_a?.name}
+            </span>
+
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="flex flex-col items-center">
+                  <input
+                    type="number"
+                    min={0}
+                    value={resultA}
+                    onChange={(e) =>
+                      setResultA(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    disabled={scoreInputsDisabled}
+                    placeholder="–"
+                    className={scoreInputClass}
+                  />
+                </div>
+                <span className="font-black text-gray-300 text-sm sm:text-lg">:</span>
+                <div className="flex flex-col items-center">
+                  <input
+                    type="number"
+                    min={0}
+                    value={resultB}
+                    onChange={(e) =>
+                      setResultB(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    disabled={scoreInputsDisabled}
+                    placeholder="–"
+                    className={scoreInputClass}
+                  />
+                </div>
+              </div>
+              {isKnockout && isDraw && status !== "scheduled" && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setWinnerId(match.team_a_id)}
+                    disabled={pasaDisabled}
+                    className={`text-[7px] sm:text-[8px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md border ${
+                      winnerId === match.team_a_id
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white dark:bg-zinc-800 text-gray-400 border-gray-200"
+                    }`}
+                  >
+                    Pasa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWinnerId(match.team_b_id)}
+                    disabled={pasaDisabled}
+                    className={`text-[7px] sm:text-[8px] font-black uppercase px-1.5 py-0.5 sm:px-2 rounded-md border ${
+                      winnerId === match.team_b_id
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white dark:bg-zinc-800 text-gray-400 border-gray-200"
+                    }`}
+                  >
+                    Pasa
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <span className="font-black text-[9px] sm:text-xs uppercase truncate text-left leading-tight">
+              {match.team_b?.name}
+            </span>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 justify-end">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-end lg:shrink-0">
           {status === "scheduled" && (
             <button
               type="button"
               onClick={handleStart}
               disabled={loading}
-              className="px-5 py-3 bg-green-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-700 shadow-lg shadow-green-500/20 disabled:opacity-50"
+              className={`${actionBtnClass} px-4 sm:px-5 bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-500/20`}
             >
               Iniciar 0-0
             </button>
@@ -239,15 +254,15 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 type="button"
                 onClick={handleLiveUpdate}
                 disabled={loading}
-                className="px-4 py-3 bg-zinc-800 dark:bg-zinc-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:opacity-90 disabled:opacity-50"
+                className={`${actionBtnClass} bg-zinc-800 dark:bg-zinc-700 text-white hover:opacity-90`}
               >
-                Actualizar marcador
+                Actualizar
               </button>
               <button
                 type="button"
                 onClick={handleFinalize}
                 disabled={loading}
-                className="px-4 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 shadow-lg shadow-red-500/20 disabled:opacity-50"
+                className={`${actionBtnClass} bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/20`}
               >
                 Finalizar
               </button>
@@ -256,7 +271,7 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
                 onClick={handleReset}
                 disabled={loading}
                 title="Reiniciar"
-                className="p-3 bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:text-red-500 rounded-xl"
+                className="p-2 sm:p-3 bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:text-red-500 rounded-lg sm:rounded-xl"
               >
                 ↺
               </button>
@@ -265,23 +280,25 @@ export default function AdminMatchRow({ match }: AdminMatchRowProps) {
 
           {status === "finished" && (
             <>
-              <span className="px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl font-black text-[10px] uppercase tracking-widest self-center">
+              <span className={`${actionBtnClass} bg-blue-100 dark:bg-blue-900/30 text-blue-600 self-center`}>
                 Cerrado
               </span>
               <button
                 type="button"
                 onClick={handleSaveCorrection}
                 disabled={loading}
-                className="px-4 py-3 bg-amber-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-700 shadow-lg shadow-amber-500/20 disabled:opacity-50"
+                title="Actualiza el marcador cerrado y recalcula los puntos de este partido"
+                className={`${actionBtnClass} bg-amber-600 text-white hover:bg-amber-700 shadow-lg shadow-amber-500/20`}
               >
-                Guardar corrección
+                <span className="sm:hidden">Corregir</span>
+                <span className="hidden sm:inline">Guardar corrección</span>
               </button>
               <button
                 type="button"
                 onClick={handleReset}
                 disabled={loading}
                 title="Reiniciar partido"
-                className="p-3 bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:text-red-500 rounded-xl"
+                className="p-2 sm:p-3 bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:text-red-500 rounded-lg sm:rounded-xl"
               >
                 ↺
               </button>

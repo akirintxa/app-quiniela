@@ -1,4 +1,5 @@
 import { isAppAdminEmail } from "@/lib/app-admin";
+import { isTournamentStarted } from "@/lib/tournament";
 import { createClient } from "@/utils/supabase/server";
 import { Match } from "@/types";
 import AdminMatchRow from "./AdminMatchRow";
@@ -96,6 +97,10 @@ export default async function AdminPage({
       ? `grupo ${selectedGroup}`
       : KNOCKOUT_STAGES.find((s) => s.id === selectedStage)?.label ?? selectedStage;
 
+  const tournamentLive = await isTournamentStarted(supabase);
+  const testActionsLockedReason =
+    "Deshabilitado: el mundial está en curso (solo pruebas pre-torneo).";
+
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
@@ -108,18 +113,24 @@ export default async function AdminPage({
               Solo para Administradores
             </p>
             <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mt-3 max-w-md leading-relaxed">
-              1. Iniciar 0-0 · 2. Actualizar marcador · 3. Finalizar · Partido cerrado: &quot;Guardar corrección&quot; · ↺ Reiniciar
+              1. Iniciar 0-0 · 2. Actualizar marcador · 3. Finalizar · Cerrado: corregir marcador y guardar (recalcula puntos) · ↺ Reiniciar
             </p>
             <p className="text-[9px] text-blue-600/80 dark:text-blue-400/80 font-bold uppercase tracking-widest mt-2 max-w-lg leading-relaxed">
               Marcadores y resultados se gestionan aquí. En eliminatorias con empate, indica quién pasa de ronda antes de finalizar.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 justify-end shrink-0 items-start">
-            <AdminRecalculatePointsButton />
-            <AdminRefreshButton />
-            <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
-              Volver
-            </Link>
+          <div className="flex flex-col items-end gap-2 shrink-0 max-w-md">
+            <div className="flex flex-wrap gap-2 justify-end items-start">
+              <AdminRecalculatePointsButton />
+              <AdminRefreshButton />
+              <Link href="/" className="text-xs font-black bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl border border-gray-100 dark:border-zinc-800 shadow-sm uppercase tracking-widest">
+                Volver
+              </Link>
+            </div>
+            <p className="text-[9px] text-gray-400 dark:text-zinc-500 font-bold leading-relaxed text-right">
+              <span className="text-gray-500 dark:text-zinc-400">Refrescar:</span> recarga esta página con los datos actuales (no cambia nada).{" "}
+              <span className="text-gray-500 dark:text-zinc-400">Recalcular puntos:</span> vuelve a calcular puntos según las reglas actuales, sin tocar marcadores.
+            </p>
           </div>
         </header>
 
@@ -180,7 +191,9 @@ export default async function AdminPage({
 
         <div className="mb-6 flex flex-col gap-4 px-2">
           <p className="text-[9px] font-bold text-amber-800/70 dark:text-amber-400/70 uppercase tracking-widest max-w-xl leading-relaxed">
-            Pruebas: aleatorizar pendientes · reiniciar toda la fase visible (marcador, cierre y puntos de esos partidos; no borra predicciones).
+            {tournamentLive
+              ? "Aleatorizar y reiniciar fase están bloqueados durante el mundial. Usa los controles de cada partido para iniciar, actualizar o finalizar."
+              : "Pruebas pre-torneo: aleatorizar pendientes · reiniciar toda la fase visible (marcador, cierre y puntos; no borra predicciones)."}
           </p>
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-end gap-4">
             <AdminRandomizePhaseButton
@@ -189,6 +202,8 @@ export default async function AdminPage({
                 : { section: "knockout" as const, stage: selectedStage })}
               label={randomizePhaseLabel}
               pendingCount={phasePendingCount}
+              locked={tournamentLive}
+              lockedReason={testActionsLockedReason}
             />
             <AdminResetPhaseButton
               {...(section === "groups"
@@ -199,6 +214,8 @@ export default async function AdminPage({
                 : { section: "knockout" as const, stage: selectedStage })}
               label={resetPhaseLabel}
               resettableCount={phaseResettableCount}
+              locked={tournamentLive}
+              lockedReason={testActionsLockedReason}
             />
           </div>
         </div>

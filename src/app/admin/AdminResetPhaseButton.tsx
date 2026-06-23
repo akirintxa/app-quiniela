@@ -10,11 +10,15 @@ import {
 type Props = AdminResetPhaseParams & {
   label: string;
   resettableCount: number;
+  locked?: boolean;
+  lockedReason?: string;
 };
 
 export default function AdminResetPhaseButton({
   label,
   resettableCount,
+  locked = false,
+  lockedReason,
   ...phaseParams
 }: Props) {
   const router = useRouter();
@@ -22,6 +26,7 @@ export default function AdminResetPhaseButton({
   const [message, setMessage] = useState<string | null>(null);
 
   const handleClick = async () => {
+    if (locked) return;
     if (resettableCount === 0) {
       setMessage("No hay partidos con resultado en esta vista.");
       return;
@@ -61,12 +66,22 @@ export default function AdminResetPhaseButton({
       <button
         type="button"
         onClick={handleClick}
-        disabled={loading || resettableCount === 0}
+        disabled={loading || resettableCount === 0 || locked}
+        title={
+          locked
+            ? lockedReason
+            : "Solo para pruebas: borra marcadores y puntos de toda la fase visible"
+        }
         className="px-5 py-3 bg-red-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 shadow-lg shadow-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? "Reiniciando…" : `Reiniciar ${label}`}
       </button>
-      {resettableCount > 0 && (
+      {locked && lockedReason && (
+        <span className="text-[9px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-widest text-right max-w-xs leading-snug">
+          {lockedReason}
+        </span>
+      )}
+      {!locked && resettableCount > 0 && (
         <span className="text-[9px] font-bold text-red-700/80 dark:text-red-400/80 uppercase tracking-widest">
           {resettableCount} con resultado
         </span>

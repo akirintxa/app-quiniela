@@ -18,7 +18,7 @@ import {
   loadMatchRow,
 } from '@/lib/match-sync';
 import { revalidateAfterMatchUpdate } from '@/lib/revalidate-app';
-import { isFavoriteTeamChangeLocked } from '@/lib/tournament';
+import { isFavoriteTeamChangeLocked, isTournamentStarted } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
 import {
   getMatchIdsToInvalidateOnGroupChange,
@@ -715,12 +715,26 @@ export type AdminResetPhaseResult =
   | { ok: true; reset: number }
   | { ok: false; error: string };
 
+const TOURNAMENT_LIVE_GUARD =
+  'Deshabilitado: el mundial ya está en curso. Solo se permiten marcadores partido a partido.';
+
+async function assertTournamentTestActionsAllowed(
+  supabase: Awaited<ReturnType<typeof getAdminDb>>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (await isTournamentStarted(supabase)) {
+    return { ok: false, error: TOURNAMENT_LIVE_GUARD };
+  }
+  return { ok: true };
+}
+
 /** Borra marcadores y puntos de todos los partidos de la fase (solo admin / pruebas). */
 export async function resetPhaseResults(
   params: AdminResetPhaseParams
 ): Promise<AdminResetPhaseResult> {
   try {
     const supabase = await getAdminDb();
+    const guard = await assertTournamentTestActionsAllowed(supabase);
+    if (!guard.ok) return guard;
 
     let query = supabase.from('matches').select('id');
 
@@ -780,6 +794,8 @@ export async function randomizePhaseResults(
 ): Promise<AdminRandomizePhaseResult> {
   try {
     const supabase = await getAdminDb();
+    const guard = await assertTournamentTestActionsAllowed(supabase);
+    if (!guard.ok) return guard;
 
     let query = supabase
       .from('matches')

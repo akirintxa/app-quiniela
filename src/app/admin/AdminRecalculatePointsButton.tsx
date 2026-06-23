@@ -41,6 +41,7 @@ export default function AdminRecalculatePointsButton() {
         type="button"
         disabled={loading}
         onClick={() => void handleClick()}
+        title="Recalcula puntos de todas las predicciones con las reglas actuales, sin cambiar marcadores"
         className="text-xs font-black bg-amber-50 dark:bg-amber-950/40 px-6 py-3 rounded-2xl border border-amber-200 dark:border-amber-900/50 shadow-sm uppercase tracking-widest text-amber-800 dark:text-amber-300 hover:border-amber-400 disabled:opacity-50"
       >
         {loading ? "Recalculando…" : "Recalcular puntos"}
