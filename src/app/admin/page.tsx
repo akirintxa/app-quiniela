@@ -7,6 +7,8 @@ import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
 import AdminResetPhaseButton from "./AdminResetPhaseButton";
 import AdminRecalculatePointsButton from "./AdminRecalculatePointsButton";
 import AdminRefreshButton from "./AdminRefreshButton";
+import MatchSyncStatus from "@/components/MatchSyncStatus";
+import { getMatchSyncStatus } from "@/lib/match-sync-status";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Metadata } from "next";
@@ -100,6 +102,7 @@ export default async function AdminPage({
   const tournamentLive = await isTournamentStarted(supabase);
   const testActionsLockedReason =
     "Deshabilitado: el mundial está en curso (solo pruebas pre-torneo).";
+  const syncStatus = await getMatchSyncStatus(supabase);
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
@@ -120,6 +123,7 @@ export default async function AdminPage({
             </p>
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0 max-w-md">
+            <MatchSyncStatus status={syncStatus} variant="admin" />
             <div className="flex flex-wrap gap-2 justify-end items-start">
               <AdminRecalculatePointsButton />
               <AdminRefreshButton />

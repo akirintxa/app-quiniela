@@ -5,6 +5,8 @@ import MobileNavbarLinks from "./MobileNavbarLinks";
 import UserMenu from "./UserMenu";
 import { isAppAdminEmail } from "@/lib/app-admin";
 import { fetchProfileFields, getFavoriteTeamFlagUrl } from "@/lib/profile";
+import { getMatchSyncStatus } from "@/lib/match-sync-status";
+import MatchSyncStatus from "./MatchSyncStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,11 @@ export default async function Navbar() {
   const { data: { user } } = await supabase.auth.getUser();
 
   const isAdmin = isAppAdminEmail(user?.email);
+
+  let syncStatus = null;
+  if (isAdmin) {
+    syncStatus = await getMatchSyncStatus(supabase);
+  }
 
   let initialNickname: string | null = null;
   let initialFlagUrl: string | null = null;
@@ -43,6 +50,7 @@ export default async function Navbar() {
         {/* Links - Solo visibles si está logueado */}
         <div className="flex items-center gap-4 sm:gap-8">
           {user && <NavbarLinks showAdmin={isAdmin} />}
+          {syncStatus && <MatchSyncStatus status={syncStatus} variant="navbar" />}
           
           {user ? (
             <UserMenu
