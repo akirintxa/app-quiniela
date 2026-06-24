@@ -314,6 +314,67 @@ export async function startDueMatchesSync(
   return { started, errors };
 }
 
+/** Intercambia team_a/team_b y espeja predicciones (solo grupos no finalizados). */
+export async function swapMatchSidesSync(
+  supabase: ServiceSupabase,
+  matchId: number
+): Promise<MatchSyncResult> {
+  try {
+    const match = await loadMatchRow(supabase, matchId);
+    if (match.is_finished) {
+      return { ok: false, error: "Partido ya cerrado" };
+    }
+    if (match.stage !== "group") {
+      return { ok: false, error: "Solo fase de grupos" };
+    }
+
+    const { error: matchError } = await supabase
+      .from("matches")
+      .update({
+        team_a_id: match.team_b_id,
+        team_b_id: match.team_a_id,
+        result_a: match.result_b,
+        result_b: match.result_a,
+      })
+      .eq("id", matchId);
+
+    if (matchError) return { ok: false, error: matchError.message };
+
+    const { data: preds, error: predFetchError } = await supabase
+      .from("predictions")
+      .select("id, predicted_a, predicted_b")
+      .eq("match_id", matchId);
+
+    if (predFetchError) return { ok: false, error: predFetchError.message };
+
+    for (const pred of preds ?? []) {
+      const { error: predUpdateError } = await supabase
+        .from("predictions")
+        .update({
+          predicted_a: pred.predicted_b,
+          predicted_b: pred.predicted_a,
+        })
+        .eq("id", pred.id);
+
+      if (predUpdateError) {
+        return { ok: false, error: predUpdateError.message };
+      }
+    }
+
+    if (match.result_a !== null && match.result_b !== null) {
+      const updated = await loadMatchRow(supabase, matchId);
+      await updatePredictionsPoints(supabase, matchId, updated);
+    }
+
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al invertir lados",
+    };
+  }
+}
+
 export async function runScheduledMatchLocksSync(
   supabase: ServiceSupabase
 ): Promise<ScheduledMatchLockResult> {

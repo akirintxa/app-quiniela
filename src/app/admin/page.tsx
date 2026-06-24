@@ -7,8 +7,11 @@ import AdminRandomizePhaseButton from "./AdminRandomizePhaseButton";
 import AdminResetPhaseButton from "./AdminResetPhaseButton";
 import AdminRecalculatePointsButton from "./AdminRecalculatePointsButton";
 import AdminRefreshButton from "./AdminRefreshButton";
+import AdminSideAlignmentPanel from "./AdminSideAlignmentPanel";
 import MatchSyncStatus from "@/components/MatchSyncStatus";
 import { getMatchSyncStatus } from "@/lib/match-sync-status";
+import { auditInvertedFutureGroupMatches } from "@/lib/match-side-alignment-server";
+import { createServiceRoleClient } from "@/utils/supabase/admin";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Metadata } from "next";
@@ -66,7 +69,7 @@ export default async function AdminPage({
       .eq("is_finished", false);
     phasePendingCount = count ?? 0;
     randomizePhaseLabel = "fase de grupos";
-  } else {
+  } else if (section === "knockout") {
     const res = await supabase
       .from("matches")
       .select(`*, team_a:teams!team_a_id(*), team_b:teams!team_b_id(*)`)
@@ -103,6 +106,21 @@ export default async function AdminPage({
   const testActionsLockedReason =
     "Deshabilitado: el mundial está en curso (solo pruebas pre-torneo).";
   const syncStatus = await getMatchSyncStatus(supabase);
+
+  let alignmentRows: Awaited<
+    ReturnType<typeof auditInvertedFutureGroupMatches>
+  > = [];
+  let alignmentError: string | null = null;
+
+  if (section === "alignment") {
+    try {
+      const adminDb = createServiceRoleClient();
+      alignmentRows = await auditInvertedFutureGroupMatches(adminDb);
+    } catch (e) {
+      alignmentError =
+        e instanceof Error ? e.message : "No se pudo cargar la auditoría";
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-black py-12 px-4 sm:px-6 lg:px-8">
@@ -159,8 +177,29 @@ export default async function AdminPage({
           >
             Eliminatorias
           </Link>
+          <Link
+            href="/admin?section=alignment"
+            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest ${
+              section === "alignment"
+                ? "bg-red-600 text-white"
+                : "bg-white dark:bg-zinc-900 text-gray-400 border border-gray-100 dark:border-zinc-800"
+            }`}
+          >
+            Alineación FIFA
+          </Link>
         </div>
 
+        {section === "alignment" ? (
+          <>
+            {alignmentError && (
+              <p className="mb-4 text-red-500 text-sm font-bold">
+                {alignmentError}
+              </p>
+            )}
+            <AdminSideAlignmentPanel rows={alignmentRows} />
+          </>
+        ) : (
+          <>
         {section === "groups" ? (
           <div className="flex flex-wrap gap-2 mb-8 bg-white dark:bg-zinc-900 p-3 rounded-[2rem] border border-gray-100 dark:border-zinc-800 shadow-sm">
             {groups.map(g => (
@@ -239,6 +278,8 @@ export default async function AdminPage({
             )}
           </div>
         </div>
+          </>
+        )}
       </div>
     </main>
   );

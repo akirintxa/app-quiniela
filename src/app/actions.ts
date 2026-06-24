@@ -13,10 +13,13 @@ import {
   finalizeMatchSync,
   recalculateAllFinishedMatchPoints,
   startMatchSync,
+  swapMatchSidesSync,
   updateLiveScoreSync,
   updatePredictionsPoints,
   loadMatchRow,
 } from '@/lib/match-sync';
+import { auditInvertedFutureGroupMatches } from '@/lib/match-side-alignment-server';
+import type { InvertedMatchAuditRow } from '@/lib/score-providers/match-side-alignment';
 import { revalidateAfterMatchUpdate } from '@/lib/revalidate-app';
 import { isFavoriteTeamChangeLocked, isTournamentStarted } from '@/lib/tournament';
 import { KNOCKOUT_MATCH_IDS } from '@/lib/bracket-fixtures';
@@ -885,6 +888,73 @@ export async function recalculateAllPoints(): Promise<
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Error al recalcular puntos",
+    };
+  }
+}
+
+export type AdminSideAlignmentAuditResult =
+  | { ok: true; rows: InvertedMatchAuditRow[] }
+  | { ok: false; error: string };
+
+export async function fetchInvertedFutureGroupMatchesAudit(): Promise<AdminSideAlignmentAuditResult> {
+  try {
+    const supabase = await getAdminDb();
+    const rows = await auditInvertedFutureGroupMatches(supabase);
+    return { ok: true, rows };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al auditar alineación",
+    };
+  }
+}
+
+export type AdminSwapSidesResult =
+  | { ok: true; swapped: number; errors: string[] }
+  | { ok: false; error: string };
+
+export async function swapMatchSidesAdmin(
+  matchId: number
+): Promise<AdminMatchActionResult> {
+  try {
+    const supabase = await getAdminDb();
+    const result = await swapMatchSidesSync(supabase, matchId);
+    if (!result.ok) return result;
+    revalidateAfterMatchUpdate();
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al invertir lados",
+    };
+  }
+}
+
+export async function swapAllInvertedFutureGroupMatches(): Promise<AdminSwapSidesResult> {
+  try {
+    const supabase = await getAdminDb();
+    const rows = await auditInvertedFutureGroupMatches(supabase);
+    const errors: string[] = [];
+    let swapped = 0;
+
+    for (const row of rows) {
+      const result = await swapMatchSidesSync(supabase, row.matchId);
+      if (!result.ok) {
+        errors.push(`Partido ${row.matchId}: ${result.error}`);
+      } else {
+        swapped += 1;
+      }
+    }
+
+    if (swapped > 0) {
+      revalidateAfterMatchUpdate();
+    }
+
+    return { ok: true, swapped, errors };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Error al invertir partidos",
     };
   }
 }
