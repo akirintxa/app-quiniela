@@ -669,8 +669,14 @@ export default function MatchCard({
                 Cerrado
               </div>
             ) : isLocked ? (
-              <div className="flex-1 py-2 sm:py-4 text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-xl sm:rounded-2xl bg-orange-50 text-orange-500 border border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 animate-pulse">
-                En juego
+              <div
+                className={`flex-1 py-2 sm:py-4 text-center text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-xl sm:rounded-2xl border animate-pulse ${
+                  isLive
+                    ? "bg-red-50 text-red-600 border-red-100 dark:bg-red-950/20 dark:border-red-900/30"
+                    : "bg-orange-50 text-orange-500 border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30"
+                }`}
+              >
+                {isLive ? "En vivo" : "Predicción cerrada"}
               </div>
             ) : (
               <div
