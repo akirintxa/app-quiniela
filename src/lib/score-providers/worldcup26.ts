@@ -7,6 +7,7 @@ export type WorldCup26Game = {
   finished: string | boolean;
   time_elapsed?: string | null;
   type?: string;
+  group?: string | null;
   home_team_name_en?: string | null;
   away_team_name_en?: string | null;
 };

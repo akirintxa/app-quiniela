@@ -10,8 +10,11 @@ import {
   isExternalNotStarted,
   type WorldCup26Game,
 } from "@/lib/score-providers/worldcup26";
+import {
+  findDbMatchForExternalGame,
+  type DbMatchWithTeams,
+} from "@/lib/score-providers/find-external-match";
 import { mapExternalScoresToMatchSides } from "@/lib/score-providers/map-external-scores";
-import type { Match, Team } from "@/types";
 
 type ServiceSupabase = SupabaseClient;
 
@@ -27,8 +30,6 @@ export type ScoreSyncResult = {
   actions?: string[];
 };
 
-type DbMatch = Match & { team_a?: Team | null; team_b?: Team | null };
-
 type SyncAction =
   | "started"
   | "updated"
@@ -39,12 +40,9 @@ type SyncAction =
 async function syncOneMatch(
   supabase: ServiceSupabase,
   game: WorldCup26Game,
-  dbMatch: DbMatch
+  dbMatch: DbMatchWithTeams
 ): Promise<SyncAction | { error: string }> {
-  const matchId = Number(game.id);
-  if (!Number.isFinite(matchId) || matchId !== dbMatch.id) {
-    return "skipped";
-  }
+  const matchId = dbMatch.id;
 
   if (dbMatch.is_finished) {
     return "skipped";
@@ -169,16 +167,7 @@ export async function runExternalScoreSync(
   }
 
   const games = await fetchWorldCup26Games();
-  const gameById = new Map<number, WorldCup26Game>();
-  for (const game of games) {
-    const id = Number(game.id);
-    if (Number.isFinite(id) && id > 0) {
-      gameById.set(id, game);
-    }
-  }
-
-  const ids = [...gameById.keys()];
-  if (ids.length === 0) {
+  if (games.length === 0) {
     return {
       ok: true,
       started: 0,
@@ -193,7 +182,7 @@ export async function runExternalScoreSync(
   const { data: matches, error } = await supabase
     .from("matches")
     .select(`*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)`)
-    .in("id", ids);
+    .eq("is_finished", false);
 
   if (error) {
     return {
@@ -219,24 +208,32 @@ export async function runExternalScoreSync(
   };
 
   const MAX_ACTIONS = 25;
+  const dbMatches = (matches ?? []) as DbMatchWithTeams[];
+  const syncedDbIds = new Set<number>();
 
-  for (const row of matches ?? []) {
-    const dbMatch = row as DbMatch;
-    const game = gameById.get(dbMatch.id);
-    if (!game) continue;
+  for (const game of games) {
+    const dbMatch = findDbMatchForExternalGame(game, dbMatches);
+    if (!dbMatch || syncedDbIds.has(dbMatch.id)) continue;
+    syncedDbIds.add(dbMatch.id);
+
+    const apiId = game.id;
+    const actionLabel = (suffix: string) =>
+      apiId !== String(dbMatch.id)
+        ? `#${dbMatch.id}(api:${apiId}) ${suffix}`
+        : `#${dbMatch.id} ${suffix}`;
 
     try {
       const action = await syncOneMatch(supabase, game, dbMatch);
       if (typeof action === "object" && "error" in action) {
         result.errors.push(`Partido ${dbMatch.id}: ${action.error}`);
         if (result.actions!.length < MAX_ACTIONS) {
-          result.actions!.push(`#${dbMatch.id} error`);
+          result.actions!.push(actionLabel("error"));
         }
         continue;
       }
 
       if (action !== "skipped" && result.actions!.length < MAX_ACTIONS) {
-        result.actions!.push(`#${dbMatch.id} ${action}`);
+        result.actions!.push(actionLabel(action));
       }
 
       switch (action) {
