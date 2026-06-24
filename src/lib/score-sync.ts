@@ -8,10 +8,10 @@ import {
   fetchWorldCup26Games,
   isExternalFinished,
   isExternalNotStarted,
-  parseExternalScore,
   type WorldCup26Game,
 } from "@/lib/score-providers/worldcup26";
-import type { Match } from "@/types";
+import { mapExternalScoresToMatchSides } from "@/lib/score-providers/map-external-scores";
+import type { Match, Team } from "@/types";
 
 type ServiceSupabase = SupabaseClient;
 
@@ -24,7 +24,10 @@ export type ScoreSyncResult = {
   skipped: number;
   penaltiesPending: number;
   errors: string[];
+  actions?: string[];
 };
+
+type DbMatch = Match & { team_a?: Team | null; team_b?: Team | null };
 
 type SyncAction =
   | "started"
@@ -36,7 +39,7 @@ type SyncAction =
 async function syncOneMatch(
   supabase: ServiceSupabase,
   game: WorldCup26Game,
-  dbMatch: Match
+  dbMatch: DbMatch
 ): Promise<SyncAction | { error: string }> {
   const matchId = Number(game.id);
   if (!Number.isFinite(matchId) || matchId !== dbMatch.id) {
@@ -51,8 +54,11 @@ async function syncOneMatch(
     return "skipped";
   }
 
-  const scoreA = parseExternalScore(game.home_score);
-  const scoreB = parseExternalScore(game.away_score);
+  const { resultA: scoreA, resultB: scoreB } = mapExternalScoresToMatchSides(
+    game,
+    dbMatch.team_a?.name,
+    dbMatch.team_b?.name
+  );
 
   if (scoreA === null || scoreB === null) {
     if (dbMatch.result_a === null && dbMatch.result_b === null) {
@@ -186,7 +192,7 @@ export async function runExternalScoreSync(
 
   const { data: matches, error } = await supabase
     .from("matches")
-    .select("*")
+    .select(`*, team_a:teams!team_a_id(name), team_b:teams!team_b_id(name)`)
     .in("id", ids);
 
   if (error) {
@@ -209,10 +215,13 @@ export async function runExternalScoreSync(
     skipped: 0,
     penaltiesPending: 0,
     errors: [],
+    actions: [],
   };
 
+  const MAX_ACTIONS = 25;
+
   for (const row of matches ?? []) {
-    const dbMatch = row as Match;
+    const dbMatch = row as DbMatch;
     const game = gameById.get(dbMatch.id);
     if (!game) continue;
 
@@ -220,7 +229,14 @@ export async function runExternalScoreSync(
       const action = await syncOneMatch(supabase, game, dbMatch);
       if (typeof action === "object" && "error" in action) {
         result.errors.push(`Partido ${dbMatch.id}: ${action.error}`);
+        if (result.actions!.length < MAX_ACTIONS) {
+          result.actions!.push(`#${dbMatch.id} error`);
+        }
         continue;
+      }
+
+      if (action !== "skipped" && result.actions!.length < MAX_ACTIONS) {
+        result.actions!.push(`#${dbMatch.id} ${action}`);
       }
 
       switch (action) {
