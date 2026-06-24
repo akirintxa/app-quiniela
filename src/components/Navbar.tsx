@@ -8,8 +8,6 @@ import { fetchProfileFields, getFavoriteTeamFlagUrl } from "@/lib/profile";
 import { getMatchSyncStatus } from "@/lib/match-sync-status";
 import MatchSyncStatus from "./MatchSyncStatus";
 
-export const dynamic = "force-dynamic";
-
 export default async function Navbar() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

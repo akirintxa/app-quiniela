@@ -1,4 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { unstable_cache } from "next/cache";
+import { tryCreateServiceRoleClient } from "@/utils/supabase/admin";
+import { GLOBAL_RANKING_CACHE_TAG } from "@/lib/revalidate-app";
 import { getTotalPointsWithFavoriteBonus } from "./favorite-bonus";
 import { getFavoriteBonusesForUsers } from "./favorite-bonus-server";
 import { fetchAllPredictionsForRanking } from "./pool-predictions-server";
@@ -164,7 +167,7 @@ export async function buildLeagueRankings(
   return results.sort((a, b) => b.average - a.average);
 }
 
-export async function buildGlobalPlayerStandings(
+async function buildGlobalPlayerStandingsUncached(
   supabase: SupabaseClient
 ): Promise<PlayerStanding[]> {
   const { data: profiles } = await supabase
@@ -182,6 +185,27 @@ export async function buildGlobalPlayerStandings(
   return sortStandingsByTotal(
     await buildPlayerStandings(supabase, rows, prefetched)
   );
+}
+
+async function buildGlobalPlayerStandingsCached(): Promise<PlayerStanding[]> {
+  const supabase = tryCreateServiceRoleClient();
+  if (!supabase) return [];
+  return buildGlobalPlayerStandingsUncached(supabase);
+}
+
+const getCachedGlobalPlayerStandings = unstable_cache(
+  buildGlobalPlayerStandingsCached,
+  ["global-player-standings-v1"],
+  { revalidate: 60, tags: [GLOBAL_RANKING_CACHE_TAG] }
+);
+
+export async function buildGlobalPlayerStandings(
+  supabase: SupabaseClient
+): Promise<PlayerStanding[]> {
+  if (tryCreateServiceRoleClient()) {
+    return getCachedGlobalPlayerStandings();
+  }
+  return buildGlobalPlayerStandingsUncached(supabase);
 }
 
 export async function getUserGlobalRankStats(

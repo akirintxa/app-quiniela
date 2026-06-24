@@ -1,7 +1,12 @@
+/**
+ * Cron externo (cron-job.org). Ahorro CPU fuera de horario de partidos:
+ * sync-scores cada 15–30 min; lock-matches cada 30 min.
+ * En días con partidos: sync cada 5 min en ventana 12:00–02:00 UTC.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { runExternalScoreSync } from "@/lib/score-sync";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { revalidateAfterMatchUpdate } from "@/lib/revalidate-app";
+import { revalidateAfterCronMatchUpdate } from "@/lib/revalidate-app";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,7 +33,7 @@ export async function GET(request: NextRequest) {
       result.updated > 0 ||
       result.finalized > 0
     ) {
-      revalidateAfterMatchUpdate();
+      revalidateAfterCronMatchUpdate();
     }
 
     const status = result.ok ? 200 : 500;

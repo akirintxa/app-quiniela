@@ -1,5 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { tryCreateServiceRoleClient } from "@/utils/supabase/admin";
+import { unstable_cache } from "next/cache";
+import { GLOBAL_RANKING_CACHE_TAG } from "@/lib/revalidate-app";
 import { Prediction } from "@/types";
 
 const RANKING_PAGE_SIZE = 1000;
@@ -63,10 +65,46 @@ async function readPredictionsForUsers(
 }
 
 /** Todas las predicciones (service role si está disponible). Solo servidor. */
+async function fetchAllPredictionsForRankingUncached(): Promise<
+  PredictionRankingRow[]
+> {
+  const client = rankingDbClient();
+  if (!client) return [];
+
+  const rows: PredictionRankingRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await client
+      .from("predictions")
+      .select("user_id, points_won, match_id")
+      .order("id", { ascending: true })
+      .range(offset, offset + RANKING_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    const page = (data ?? []) as PredictionRankingRow[];
+    rows.push(...page);
+    if (page.length < RANKING_PAGE_SIZE) break;
+    offset += RANKING_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+const getCachedAllPredictionsForRanking = unstable_cache(
+  fetchAllPredictionsForRankingUncached,
+  ["all-predictions-ranking-v1"],
+  { revalidate: 60, tags: [GLOBAL_RANKING_CACHE_TAG] }
+);
+
 export async function fetchAllPredictionsForRanking(): Promise<
   PredictionRankingRow[]
 > {
-  const client = rankingDbClient() ?? (await createClient());
+  if (rankingDbClient()) {
+    return getCachedAllPredictionsForRanking();
+  }
+
+  const client = await createClient();
   const rows: PredictionRankingRow[] = [];
   let offset = 0;
 

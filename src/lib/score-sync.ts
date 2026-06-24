@@ -18,6 +18,33 @@ import { mapExternalScoresToMatchSides } from "@/lib/score-providers/map-externa
 
 type ServiceSupabase = SupabaseClient;
 
+const ACTIVE_MATCH_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+function isInActiveMatchWindow(startTime: string, nowMs = Date.now()): boolean {
+  const kickoff = new Date(startTime).getTime();
+  if (Number.isNaN(kickoff)) return false;
+  return (
+    nowMs >= kickoff - ACTIVE_MATCH_WINDOW_MS &&
+    nowMs <= kickoff + ACTIVE_MATCH_WINDOW_MS
+  );
+}
+
+/** Skip heavy sync when API has no live games and no open DB match is near kickoff. */
+function shouldSkipIdleScoreSync(
+  games: WorldCup26Game[],
+  dbMatches: DbMatchWithTeams[]
+): boolean {
+  if (games.some((game) => !isExternalNotStarted(game))) {
+    return false;
+  }
+
+  return !dbMatches.some(
+    (match) =>
+      (match.result_a !== null && match.result_b !== null) ||
+      isInActiveMatchWindow(match.start_time)
+  );
+}
+
 export type ScoreSyncResult = {
   ok: boolean;
   disabled?: boolean;
@@ -196,6 +223,20 @@ export async function runExternalScoreSync(
     };
   }
 
+  const dbMatches = (matches ?? []) as DbMatchWithTeams[];
+
+  if (shouldSkipIdleScoreSync(games, dbMatches)) {
+    return {
+      ok: true,
+      started: 0,
+      updated: 0,
+      finalized: 0,
+      skipped: games.length,
+      penaltiesPending: 0,
+      errors: [],
+    };
+  }
+
   const result: ScoreSyncResult = {
     ok: true,
     started: 0,
@@ -208,7 +249,6 @@ export async function runExternalScoreSync(
   };
 
   const MAX_ACTIONS = 25;
-  const dbMatches = (matches ?? []) as DbMatchWithTeams[];
   const syncedDbIds = new Set<number>();
 
   for (const game of games) {

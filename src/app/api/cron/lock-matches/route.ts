@@ -1,7 +1,11 @@
+/**
+ * Cron externo (cron-job.org). Ver comentario en sync-scores/route.ts
+ * para intervalos recomendados fuera de horario de partidos.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { runScheduledMatchLocksSync } from "@/lib/match-sync";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { revalidateAfterMatchUpdate } from "@/lib/revalidate-app";
+import { revalidateAfterCronMatchUpdate } from "@/lib/revalidate-app";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest) {
   const result = await runScheduledMatchLocksSync(supabase);
 
   if (result.locked > 0 || result.started > 0) {
-    revalidateAfterMatchUpdate();
+    revalidateAfterCronMatchUpdate();
   }
 
   const status = result.ok ? 200 : 500;
