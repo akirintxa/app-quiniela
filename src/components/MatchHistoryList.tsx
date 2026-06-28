@@ -7,20 +7,35 @@ export default function MatchHistoryList({ rows }: { rows: MatchHistoryRow[] }) 
         <div
           key={i}
           className={`flex items-center justify-between p-4 rounded-2xl border ${
-            h.kind === "bonus"
-              ? "bg-orange-50/80 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900/40"
-              : "bg-gray-50 dark:bg-zinc-800/40 border-gray-100 dark:border-zinc-800/50"
+            h.isLive
+              ? "bg-red-50/80 dark:bg-red-950/20 border-red-300 dark:border-red-700/60 ring-1 ring-red-400/30"
+              : h.kind === "bonus"
+                ? "bg-orange-50/80 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900/40"
+                : "bg-gray-50 dark:bg-zinc-800/40 border-gray-100 dark:border-zinc-800/50"
           }`}
         >
           <div className="flex flex-col min-w-0">
             <span
-              className={`text-[10px] font-black uppercase mb-1 ${
-                h.kind === "bonus"
-                  ? "text-orange-700 dark:text-orange-400"
-                  : "text-gray-400"
+              className={`text-[10px] font-black uppercase mb-1 flex items-center gap-1.5 ${
+                h.isLive
+                  ? "text-red-700 dark:text-red-400"
+                  : h.kind === "bonus"
+                    ? "text-orange-700 dark:text-orange-400"
+                    : "text-gray-400"
               }`}
             >
+              {h.isLive && (
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
+                </span>
+              )}
               {h.match}
+              {h.isLive && (
+                <span className="ml-1 text-[8px] font-black tracking-widest text-red-600 dark:text-red-400 uppercase">
+                  EN VIVO
+                </span>
+              )}
             </span>
             {h.kind === "match" ? (
               <>
@@ -33,8 +48,8 @@ export default function MatchHistoryList({ rows }: { rows: MatchHistoryRow[] }) 
                   </span>
                   <span className="w-px h-3 bg-gray-200 dark:bg-zinc-700" />
                   <span className="text-xs font-bold text-gray-500 italic">
-                    Res:{" "}
-                    <span className="text-blue-600 not-italic">{h.res}</span>
+                    {h.isLive ? "Marcador" : "Res"}:{" "}
+                    <span className={`not-italic ${h.isLive ? "text-red-600 dark:text-red-400" : "text-blue-600"}`}>{h.res}</span>
                   </span>
                 </div>
                 {h.breakdown && (

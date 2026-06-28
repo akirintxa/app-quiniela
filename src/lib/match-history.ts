@@ -21,6 +21,7 @@ export type MatchHistoryRow = {
   pts: number;
   breakdown: string;
   total: number;
+  isLive?: boolean;
 };
 
 const STAGE_SHORT_LABELS: Record<string, string> = {
@@ -215,6 +216,7 @@ export function buildMatchHistoryRows(input: BuildMatchHistoryInput): MatchHisto
       pts,
       breakdown,
       total: cumulative,
+      isLive: !m.is_finished,
     });
 
     if (isLastFinishedMatchInPhase(m, finishedMatches, allMatches)) {
