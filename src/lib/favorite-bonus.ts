@@ -39,19 +39,19 @@ export const FAVORITE_BONUS_RULES = [
   },
   {
     key: "to_quarter",
-    points: 10,
+    points: 5,
     label: "Clasifica a cuartos",
     detail: "Gana su partido de octavos",
   },
   {
     key: "to_semi",
-    points: 10,
+    points: 5,
     label: "Clasifica a semis",
     detail: "Gana su partido de cuartos",
   },
   {
     key: "to_final",
-    points: 15,
+    points: 5,
     label: "Llega a la final",
     detail: "Gana su partido de semifinal",
   },
@@ -271,7 +271,7 @@ export function getFavoriteBonusPointsForHistoryPhase(
         : 0;
     case "to_quarter":
       return teamWonStage(favoriteTeamId, "round_16", finishedKnockout, resolvedKoById)
-        ? 10
+        ? 5
         : 0;
     case "to_semi":
       return teamWonStage(
@@ -280,11 +280,11 @@ export function getFavoriteBonusPointsForHistoryPhase(
         finishedKnockout,
         resolvedKoById
       )
-        ? 10
+        ? 5
         : 0;
     case "to_final":
       return teamWonStage(favoriteTeamId, "semi_final", finishedKnockout, resolvedKoById)
-        ? 15
+        ? 5
         : 0;
     case "final_winner":
       return teamWonStage(favoriteTeamId, "final", finishedKnockout, resolvedKoById)
