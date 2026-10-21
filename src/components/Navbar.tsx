@@ -60,6 +60,12 @@ export default async function Navbar() {
           ) : (
             <div className="flex items-center gap-2 sm:gap-3">
               <Link
+                href="/tabla"
+                className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors px-2"
+              >
+                Tabla
+              </Link>
+              <Link
                 href="/login?mode=signup"
                 className="hidden sm:inline bg-blue-600 text-white px-4 sm:px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
               >

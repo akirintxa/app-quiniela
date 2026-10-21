@@ -95,6 +95,12 @@ export default function LandingPage() {
                   Empezar a jugar
                 </Link>
                 <Link
+                  href="/tabla"
+                  className="text-center bg-gray-100 dark:bg-zinc-900 text-gray-900 dark:text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs border border-gray-200 dark:border-zinc-800 transition-all hover:bg-gray-200 dark:hover:bg-zinc-800"
+                >
+                  Ver tabla general
+                </Link>
+                <Link
                   href="/login"
                   className="text-center bg-gray-100 dark:bg-zinc-900 text-gray-900 dark:text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs border border-gray-200 dark:border-zinc-800 transition-all hover:bg-gray-200 dark:hover:bg-zinc-800"
                 >
@@ -179,6 +185,12 @@ export default function LandingPage() {
             Q26 — Quiniela 2026
           </p>
           <nav className="flex flex-wrap items-center justify-center gap-6">
+            <Link
+              href="/tabla"
+              className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors"
+            >
+              Tabla general
+            </Link>
             <Link
               href="/login?mode=signup"
               className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-blue-600 transition-colors"
